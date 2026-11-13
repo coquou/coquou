@@ -65,12 +65,12 @@
       }
     ],
     "createUpdaterArtifacts": false,
-    "publisher": "continuationcs",
-    "copyright": "© 2026 continuationcs and Coquou contributors",
+    "publisher": "Coquou",
+    "copyright": "© 2026 Coquou contributors",
     "category": "Entertainment",
     "shortDescription": "开源桌面宠物",
     "longDescription": "Coquou 是一个开源的桌面宠物：可爱的小家伙在屏幕角落溜达，可以摸、拎、扔，兼容 Codex 宠物包，也能用 AI 孵化你自己的宠物。",
-    "homepage": "https://github.com/continuationcs/perchy",
+    "homepage": "https://github.com/coquou/coquou",
     "windows": {
       "nsis": {
         "languages": [
@@ -89,7 +89,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk0RTYwMTk2OEU1NTFDRUEKUldUcUhGV09sZ0htbEd5ZzFVa3hZMjVKQmZ6M0NzOFo2UGpsajJyYTVPUU9taC9HK0dhcVpkeEMK",
       "endpoints": [
-        "https://github.com/continuationcs/perchy/releases/latest/download/latest.json"
+        "https://github.com/coquou/coquou/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

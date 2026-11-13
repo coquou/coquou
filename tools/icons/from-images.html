@@ -1,0 +1,56 @@
+<!doctype html>
+<meta charset="utf-8">
+<!--
+  Turns the artwork in tools/icons/source/ into icon PNGs (run through
+  tools/build-icons.py, which reads #out):
+    icon     1024², the colour art clipped to the macOS squircle with a shadow
+    tray     64², the monochrome art as black-on-transparent (template image)
+-->
+<pre id="out"></pre>
+<script>
+const SQ = "M 512 100 C 836 100 924 188 924 512 C 924 836 836 924 512 924 C 188 924 100 836 100 512 C 100 188 188 100 512 100 Z";
+const load = (src) => new Promise((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = bad; i.src = src; });
+const q = new URLSearchParams(location.search);
+(async () => {
+  try {
+    const color = await load(q.get("color"));
+    const mono = await load(q.get("mono"));
+
+    // ---- colour icon ----
+    const c = document.createElement("canvas"); c.width = c.height = 1024;
+    const g = c.getContext("2d");
+    const sq = new Path2D(SQ);
+    g.save();
+    g.shadowColor = "rgba(0,0,0,.22)"; g.shadowBlur = 36; g.shadowOffsetY = 14;
+    g.fillStyle = "#f9b496"; g.fill(sq);
+    g.restore();
+    g.save(); g.clip(sq);
+    g.imageSmoothingQuality = "high";
+    g.drawImage(color, 100, 100, 824, 824);
+    g.restore();
+
+    // ---- tray template: darkness → alpha, cropped to the artwork ----
+    const W = mono.naturalWidth, H = mono.naturalHeight;
+    const m = document.createElement("canvas"); m.width = W; m.height = H;
+    const mg = m.getContext("2d"); mg.drawImage(mono, 0, 0);
+    const px = mg.getImageData(0, 0, W, H); const d = px.data;
+    let x0 = W, y0 = H, x1 = 0, y1 = 0;
+    for (let i = 0; i < W * H; i++) {
+      const lum = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2];
+      const a = Math.round(d[i * 4 + 3] * (255 - lum) / 255);
+      d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = 0; d[i * 4 + 3] = a;
+      if (a > 40) { const x = i % W, y = (i / W) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    mg.putImageData(px, 0, 0);
+    const side = Math.max(x1 - x0, y1 - y0) * 1.06;
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+    const t = document.createElement("canvas"); t.width = t.height = 64;
+    const tg = t.getContext("2d"); tg.imageSmoothingQuality = "high";
+    tg.drawImage(m, cx - side / 2, cy - side / 2, side, side, 0, 0, 64, 64);
+
+    document.getElementById("out").textContent = JSON.stringify({ icon: c.toDataURL("image/png"), tray: t.toDataURL("image/png") });
+  } catch (e) {
+    document.getElementById("out").textContent = JSON.stringify({ error: String(e) });
+  }
+})();
+</script>

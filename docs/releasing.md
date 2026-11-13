@@ -3,7 +3,7 @@
 Coquou 用 Tauri 官方的 `tauri-plugin-updater` 自动更新：
 
 - 应用启动 20 秒后检查一次，之后每 6 小时检查一次（设置 → 关于与更新 →「自动检查更新」可关）。
-- 检查地址：`https://github.com/continuationcs/perchy/releases/latest/download/latest.json`，即 GitHub 上最新一个正式 Release 里的 `latest.json`。
+- 检查地址：`https://github.com/coquou/coquou/releases/latest/download/latest.json`，即 GitHub 上最新一个正式 Release 里的 `latest.json`。
 - 发现新版本时，宠物冒气泡提示，托盘第一项变成「有新版本 x.y.z，查看更新…」，设置窗口显示更新说明。用户点「更新并重启」才会安装，**不会静默安装**。
 - 下载的更新包要用 `tauri.conf.json` 里的公钥验签，签名不对就拒绝安装。
 
@@ -11,14 +11,14 @@ Coquou 用 Tauri 官方的 `tauri-plugin-updater` 自动更新：
 
 | 文件 | 说明 |
 |---|---|
-| `~/.tauri/perchy-updater.key` | **更新签名私钥**，只在发版用的 Mac 上，不进仓库。**一定要备份**：丢了它，已经装好的 Coquou 就再也收不到更新（只能让用户手动重装带新公钥的版本） |
-| `~/.tauri/perchy-updater.key.pub` | 公钥，已写进 `src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey` |
+| `~/.tauri/coquou-updater.key` | **更新签名私钥**，只在发版用的 Mac 上，不进仓库。**一定要备份**：丢了它，已经装好的 Coquou 就再也收不到更新（只能让用户手动重装带新公钥的版本） |
+| `~/.tauri/coquou-updater.key.pub` | 公钥，已写进 `src-tauri/tauri.conf.json` 的 `plugins.updater.pubkey` |
 
 私钥目前没有密码。也可以设一个密码（`npx @tauri-apps/cli@2 signer generate -w <路径> -p <密码>` 重新生成，同时更新公钥），发版时通过 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 传入。
 
 ## 发版步骤
 
-前提：Mac 上有私钥；两台机器都装好 GitHub CLI（`gh`），并能写 `continuationcs/perchy`。上传和发布命令用对应账号的令牌运行，例如：
+前提：Mac 上有私钥；两台机器都装好 GitHub CLI（`gh`），并能写 `coquou/coquou`。上传和发布命令用对应账号的令牌运行，例如：
 
 ```bash
 export GH_TOKEN=$(gh auth token -u continuationcs)
@@ -83,7 +83,7 @@ cd src-tauri
 npx @tauri-apps/cli@2 build --debug --bundles app
 cp -R target/debug/bundle/macos/Coquou.app /tmp/coquou-e2e/
 # 2) 打一个带签名的 0.1.1 更新包
-TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/perchy-updater.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
+TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/coquou-updater.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
   npx @tauri-apps/cli@2 build --debug --bundles app --config '{"version":"0.1.1","bundle":{"createUpdaterArtifacts":true}}'
 # 3) 用 Coquou.app.tar.gz 和 .sig 写一个 latest.json，用 python3 -m http.server 提供出来，然后：
 COQUOU_UPDATE_URL=http://127.0.0.1:8899/latest.json COQUOU_UPDATE_AUTOINSTALL=1 \
@@ -92,12 +92,8 @@ COQUOU_UPDATE_URL=http://127.0.0.1:8899/latest.json COQUOU_UPDATE_AUTOINSTALL=1 
 
 日志里依次出现 `update available: 0.1.0 → 0.1.1`、`update installed, restarting`，`/tmp/coquou-e2e/Coquou.app` 的版本变成 0.1.1。把更新包改坏后再试，应当出现 `signature verification failed`，并且不会安装。
 
-## 迁到 GitHub 组织
+## 仓库与旧名
 
-应用已改名为 Coquou（标识 `io.github.coquou`），计划建 GitHub 组织 `coquou`，把仓库迁过去。迁移后要改三处地址，再发一个新版本：
+仓库在 [coquou/coquou](https://github.com/coquou/coquou)，更新检查地址、发版脚本里的 `REPO`、主窗口里的「项目主页 / 反馈问题 / 发布记录」链接都指向这里。
 
-- `src-tauri/tauri.conf.json` 的 `plugins.updater.endpoints`
-- `tools/release.py` 的 `REPO`
-- `src-tauri/src/main.rs` 里 `open_link` 的三个链接
-
-GitHub 会把旧仓库地址（包括 Release 下载地址）自动重定向到新地址，所以迁移前已经装好的版本照样能检查到更新；但不要在旧地址上再新建同名仓库，否则重定向会失效。私钥文件名 `perchy-updater.key` 保持不变，签名公钥也不用换。
+改名前的仓库 `continuationcs/perchy` 是另一个独立仓库（不是迁移过来的，没有地址重定向）。它没发布过任何 Release，所以不会有已安装的版本去那里检查更新；建议在 GitHub 上把它归档（Archive），README 指向新仓库。

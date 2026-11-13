@@ -2,7 +2,7 @@
 """Build and publish a Coquou release on GitHub (used by the in-app updater).
 
 The updater signing key lives only on the release Mac
-(~/.tauri/perchy-updater.key, or $COQUOU_UPDATER_KEY). The Windows machine
+(~/.tauri/coquou-updater.key, or $COQUOU_UPDATER_KEY). The Windows machine
 just builds and uploads its installer; the Mac signs it and publishes.
 
     # Mac: set the version, commit, push
@@ -41,10 +41,10 @@ ROOT = Path(__file__).resolve().parent.parent
 TAURI = ROOT / "src-tauri"
 CONF = TAURI / "tauri.conf.json"
 CARGO = TAURI / "Cargo.toml"
-REPO = "continuationcs/perchy"
+REPO = "coquou/coquou"
 NPX = "npx.cmd" if os.name == "nt" else "npx"
 CLI = [NPX, "-y", "@tauri-apps/cli@2"]
-KEY = Path(os.environ.get("COQUOU_UPDATER_KEY", Path.home() / ".tauri" / "perchy-updater.key"))
+KEY = Path(os.environ.get("COQUOU_UPDATER_KEY", Path.home() / ".tauri" / "coquou-updater.key"))
 
 
 def run(cmd, **kw):
@@ -169,7 +169,7 @@ def cmd_publish(a):
     tag = f"v{v}"
     info = json.loads(gh("release", "view", tag, "--repo", REPO, "--json", "body,assets,isDraft", capture=True))
     names = {x["name"] for x in info["assets"]}
-    work = Path(tempfile.mkdtemp(prefix="perchy-release-"))
+    work = Path(tempfile.mkdtemp(prefix="coquou-release-"))
     platforms = {}
     for name in sorted(names):
         keys = next((k for rx, k in PLATFORM_OF if rx.search(name)), None)

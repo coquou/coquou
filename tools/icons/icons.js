@@ -54,7 +54,7 @@ const CONCEPTS = [
   {
     id: "perch",
     name: "C · 枝头小鸟",
-    note: "一只小鸟停在树枝上，对应「栖息」的意象（产品曾叫 Perchy）。安静、有格调。",
+    note: "一只小鸟停在树枝上，对应「栖息」的意象。安静、有格调。",
     icon: frame("c", ["#7fe0c0", "#22a07f"], `
       <defs><radialGradient id="cbird" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e7eef0"/></radialGradient></defs>
       <path d="M170 720 C 340 650 600 640 860 700" fill="none" stroke="#6b4426" stroke-width="40" stroke-linecap="round"/>

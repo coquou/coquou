@@ -20,10 +20,10 @@
 | Rust | <https://rustup.rs>，默认工具链 `stable-x86_64-pc-windows-msvc` |
 | Node.js | 只用来通过 `npx` 调用 Tauri CLI 打包 |
 | Python 3 | 只在跑离线自测时需要；Windows 上命令一般是 `py` |
-| Git + GitHub 访问权限 | 仓库是私有的，需要能拉取 `continuationcs/perchy` |
+| Git | 仓库是公开的：`coquou/coquou` |
 
 ```powershell
-git clone https://github.com/continuationcs/perchy.git
+git clone https://github.com/coquou/coquou.git
 ```
 
 ## 2. 构建与运行
@@ -31,7 +31,7 @@ git clone https://github.com/continuationcs/perchy.git
 开发运行（debug 版会带一个控制台窗口，日志都打印在里面，测试时用这个）：
 
 ```powershell
-cd perchy\src-tauri
+cd coquou\src-tauri
 cargo run
 ```
 

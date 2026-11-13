@@ -139,8 +139,9 @@ tools/release.py          发版脚本（改版本号、打包、上传、签名
 tools/mock-image-api.py   离线测试用的模拟图像接口
 tools/presets/            预设宠物的绘制代码（rig.js 动作系统 + characters.js 角色）
 tools/build-presets.py    把预设渲染成 src-tauri/presets/ 下的宠物目录
-tools/icons/              应用图标方案（icons.js；preview.html 对比各方案）
-tools/build-icons.py      按选定方案生成全部应用图标和托盘图标
+tools/icons/source/       应用图标原图（coquou-color.webp 彩色、coquou-mono.png 单色）
+tools/build-icons.py      从原图生成全部应用图标（裁成圆角方形）和托盘图标（单色模板图）
+tools/icons/              早期的程序绘制图标方案（icons.js、preview.html），仅供参考
 ```
 
 ## 点击穿透原理

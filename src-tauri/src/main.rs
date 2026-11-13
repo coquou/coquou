@@ -236,9 +236,9 @@ fn open_path(target: impl AsRef<std::ffi::OsStr>) {
 #[tauri::command]
 fn open_link(which: String) -> Result<(), String> {
     let url = match which.as_str() {
-        "home" => "https://github.com/continuationcs/perchy",
-        "issues" => "https://github.com/continuationcs/perchy/issues",
-        "releases" => "https://github.com/continuationcs/perchy/releases",
+        "home" => "https://github.com/coquou/coquou",
+        "issues" => "https://github.com/coquou/coquou/issues",
+        "releases" => "https://github.com/coquou/coquou/releases",
         _ => return Err(format!("unknown link {which}")),
     };
     open_path(url);
