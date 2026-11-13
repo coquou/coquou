@@ -1,0 +1,172 @@
+# 开发说明
+
+Coquou 是一个 [Tauri 2](https://tauri.app) 应用：Rust 后端 + 纯静态网页前端（没有打包器、没有 npm 依赖）。代码约定见仓库根目录的 [AGENTS.md](../AGENTS.md)。
+
+## 环境
+
+- Rust stable
+- Node.js：只用来通过 `npx @tauri-apps/cli@2` 打包和生成图标
+- Python 3：开发脚本和离线自测
+- Google Chrome / Edge：生成预设宠物和图标时用无头模式渲染
+- Windows 另需 Visual Studio Build Tools（C++ 桌面开发）和 WebView2，见 [testing-windows.md](testing-windows.md)
+
+## 常用命令
+
+所有命令都在仓库根目录执行。
+
+```bash
+cargo run                      # 开发运行；日志打印在终端
+cargo test                     # 单元测试
+cargo clippy --all-targets     # 静态检查
+npx @tauri-apps/cli@2 build --debug --bundles app   # 打一个调试版应用包（macOS）
+```
+
+日志同时写到终端和日志文件（按大小轮转，保留最近几份），网页里的 `console.info/warn/error` 和未捕获的错误也会写进去：
+
+| 系统 | 日志文件 |
+|---|---|
+| macOS | `~/Library/Logs/io.github.coquou/Coquou.log` |
+| Windows | `%LOCALAPPDATA%\io.github.coquou\logs\Coquou.log` |
+
+开发用的启动参数：
+
+| 参数 | 作用 |
+|---|---|
+| `--window` | 启动时打开主窗口 |
+| `--pet <key>` | 用指定宠物启动并记住，例如 `--pet preset:qiqi` |
+| `<文件>` | 安装 `.pet` / `.zip` / 宠物目录 |
+| `--hatch-selftest <地址> <images\|chat> [transparent] [persist]` | 孵化离线自测，见下 |
+
+## 目录结构
+
+```
+Cargo.toml / Cargo.lock / tauri.conf.json   清单与 Tauri 配置
+README.md / AGENTS.md / LICENSE
+doc/                     全部文档（图片在 doc/images/）
+src/
+  core/                  Rust 后端
+    main.rs              启动与组装：插件、命令注册、窗口事件、启动参数
+    overlay.rs           桌宠窗口：点击穿透、原生光标推送、电源与全屏监控
+    tray.rs              托盘菜单（也处理 macOS 应用菜单的动作）
+    windows.rs           主窗口、macOS 应用菜单、打开文件夹和链接
+    prefs.rs             宠物偏好（宠物、大小、活动范围、活跃程度、睡觉、说话、首次启动）
+    settings.rs          应用设置与 settings.json 读写
+    pets.rs              宠物发现（list_pets）与限定在宠物目录内的文件读取（read_pet_file）
+    install.rs           .pet / .zip / 目录的校验、安装、导出
+    library.rs           宠物库命令：安装、导入、拖放、导出、删除
+    ai.rs                AI 接口配置、钥匙串、两种 OpenAI 协议
+    hatch_run.rs         未完成孵化的存盘与恢复
+    screens.rs           显示器选择与热插拔
+    system.rs            全屏与电池检测（macOS / Windows 各一套）
+    update.rs            自动更新
+    migrate.rs           从旧名 Perchy / Pipkin 迁移数据
+    build.rs             构建脚本；capabilities/ 是窗口权限
+  ui/                    前端（纯静态文件）
+    index.html / main.js 桌宠窗口：状态机、物理、命中检测、台词气泡
+    cat.js               内置程序化宠物「团团」
+    sprite.js            Codex 图集 + coquou.json 渲染器
+    app.html / app.css / app.js   主窗口
+    hatch.js / hatch-pipeline.js  主窗口的孵化页与图像流水线
+  assets/
+    icons/               应用与托盘图标（source/ 是原图）
+    presets/             预设宠物，随应用打包
+  tools/                 开发脚本
+    build-presets.py     渲染预设宠物（presets/ 里是绘制代码）
+    build-icons.py       从原图生成全部图标（icon-from-artwork.html 做图像处理）
+    release.py           发版脚本，见 releasing.md
+  tests/                 测试工具
+    mock-image-api.py    模拟图像接口（孵化离线自测）
+    analyze-atlas.py     图集质量分析
+out/                     发版产物（不进仓库）
+target/ / gen/           编译输出（不进仓库）
+```
+
+## 原理
+
+### 桌宠窗口与点击穿透
+
+桌宠窗口透明、无边框、置顶、不可聚焦，铺满一块显示器的工作区。窗口默认忽略鼠标（点击穿透到下面的窗口）。穿透状态下网页收不到鼠标事件，所以由 Rust 线程以约 60 Hz（用电池时 30 Hz）读取系统光标，只在光标移动时推送 `cursor` 事件；网页在宠物的精灵缓冲里读该点的 alpha，不透明就关掉穿透接管鼠标，透明就打开。拖拽期间一直接管。
+
+### 状态与偏好
+
+- 宠物偏好（当前宠物、各宠物大小、活动范围、活跃程度、自动睡觉、说话、首次启动标记）由 `prefs.rs` 管理，和应用设置一起存在 `<应用配置目录>/settings.json`。主窗口用 `prefs_set` 修改，变化以 `prefs` 事件广播，桌宠窗口照着应用。
+- 「桌面上正在显示哪只宠物」是运行时状态（`report_current_pet`）：记住的宠物不存在时，桌宠会临时换一只，但不改掉用户的选择。
+- 换宠物要先加载素材，所以走桌宠窗口：主窗口和托盘发 `pet-command`（`pet:<key>`、`reset`、`sleep`）。
+
+### 系统适配
+
+| 能力 | macOS | Windows |
+|---|---|---|
+| 全屏应用时自动隐藏 | 前台普通窗口盖满所在显示器（含菜单栏）即判定全屏；不需要录屏权限 | `SHQueryUserNotificationState`（全屏、D3D 独占、演示模式） |
+| 电池供电降到 30 fps | IOKit `IOPSGetProvidingPowerSourceType` | `GetSystemPowerStatus` |
+| 多显示器 | 主窗口「通用 → 显示器」选择；把宠物拖到另一块屏松手即搬过去；拔掉显示器回到主屏，插回来再回去 | 同左 |
+| 不抢焦点 | 窗口不可聚焦，点宠物不会打断正在输入的应用 | 同左 |
+
+## 预设宠物
+
+栖栖（`qiqi`）和棉棉（`mianmian`）用代码绘制（`src/tools/presets/`：`rig.js` 是动作系统，`characters.js` 是角色和台词），渲染成标准 Codex v2 图集，另附 2× 高清图集。改了绘制代码或台词后重新生成：
+
+```bash
+python3 src/tools/build-presets.py
+```
+
+输出到 `src/assets/presets/<id>/`，随应用打包；只读，不能删除或覆盖。
+
+## 图标
+
+原图在 `src/assets/icons/source/`（`coquou-color.webp` 彩色、`coquou-mono.png` 单色）。换了原图后：
+
+```bash
+python3 src/tools/build-icons.py
+```
+
+会生成应用图标（彩色原图裁进 macOS 风格圆角方形）、各平台尺寸、托盘图标（macOS 用单色模板图），以及主窗口用的 `src/ui/app-icon.png`。
+
+## AI 孵化
+
+**接口**：用户自己填地址、key、模型，支持两种 OpenAI 协议：
+
+| 协议 | 请求 | 取图 |
+|---|---|---|
+| Images | 无参考图 `POST {地址}/images/generations`（JSON）；有参考图 `POST {地址}/images/edits`（multipart，`image[]`），该路径 404/405 时（如 OpenRouter）改用 `POST {地址}/images` + `input_references` 并记住 | `data[0].b64_json` 或 `data[0].url` |
+| Chat 输出图片 | `POST {地址}/chat/completions`，`modalities: ["image","text"]`，参考图作 `image_url` data URL | `choices[0].message.images[].image_url.url`；兼容服务放在 `content` 里的图片段、data URL、Markdown 链接也能取 |
+
+接口拒绝的可选参数（例如不支持透明背景）会自动去掉重试并关闭该选项；不发送 `n`。key 存系统钥匙串（服务名 `io.github.coquou.ai`），读到后在内存里缓存；请求在 Rust 侧发出，key 不进网页。
+
+**流程**（`src/ui/hatch-pipeline.js`）：
+
+1. 形象：参考图或描述 → 一张标准形象（纯色抠像底：默认绿，角色偏绿时换品红；会排除参考图自己的背景色）。
+2. 每个动作生成一张网格图（8 帧 4×2、6/5 帧 3×2、4 帧 2×2），以标准形象为参考；「向左走」由「向右走」镜像。可选 16 个看向方向：先生成上右下左 4 个锚点，再以锚点为参考生成两行。共 9–12 次调用。
+3. 抠图：按与背景色的距离给出 alpha；混入背景色的半透明像素按抠像通道的超出量反混合还原颜色；轮廓附近再去一次溢色。
+4. 切帧与缩放：连通域按质心分到格子 → 所有行共用一个缩放比例（以待机行身高为准）→ 统一地面线 → 拼成 1536×2288 的 Codex v2 图集。
+5. 自动检查：缺帧、多出姿势、碰到图片边缘、越出格子、背景不纯；每行可单独重新生成。
+6. 可靠性：失败的行自动重试一次（4xx 不重试，429 除外）；进度存盘在 `<应用数据目录>/hatch-run/`，关掉窗口后可「继续上次」，安装成功后清除。
+7. 安装：走和 `.pet` 相同的校验。
+
+**离线自测**（不花钱，不需要 key）：
+
+```bash
+python3 src/tests/mock-image-api.py 8765
+```
+
+```bash
+cargo run -- --hatch-selftest http://127.0.0.1:8765/v1 images
+```
+
+把 `images` 换成 `chat` 测另一种协议；末尾加 `persist` 额外验证存盘恢复（会清掉未完成的孵化）；模拟接口加 `--openrouter` 模拟没有 `/images/edits` 的服务。日志里出现 `selftest PASS` 即通过。自测会装上一只 `selftest-*` 宠物，测完可在主窗口删除。
+
+质量指标（色边比例、各行身体宽度是否一致）：
+
+```bash
+python3 src/tests/analyze-atlas.py <宠物目录>/spritesheet.png
+```
+
+## 发版与自动更新
+
+见 [releasing.md](releasing.md)。
+
+## 已知局限
+
+- AI 孵化在 macOS 上用真实模型（OpenRouter + gpt-image-2）跑通过；之后改进的抠图、统一缩放和看向方向只在模拟接口上验证过。
+- Windows 真机已验证窗口、穿透和系统适配；宠物包安装导出、AI 孵化和主窗口还要按 [testing-windows.md](testing-windows.md) 补测。
+- 未签名的版本首次打开会被 Gatekeeper / SmartScreen 拦一下，见 README「下载安装」。

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Coquou",
+  "version": "0.1.0",
+  "identifier": "io.github.coquou",
+  "build": {
+    "frontendDist": "src/ui"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Coquou",
+        "width": 800,
+        "height": 600,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "shadow": false,
+        "resizable": false,
+        "visible": false,
+        "focus": false,
+        "focusable": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "src/assets/presets/": "presets/"
+    },
+    "icon": [
+      "src/assets/icons/32x32.png",
+      "src/assets/icons/128x128.png",
+      "src/assets/icons/128x128@2x.png",
+      "src/assets/icons/icon.icns",
+      "src/assets/icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "pet"
+        ],
+        "name": "Coquou Pet",
+        "description": "Coquou 宠物包",
+        "role": "Viewer",
+        "rank": "Owner",
+        "mimeType": "application/x-coquou-pet",
+        "contentTypes": [
+          "io.github.coquou.pet"
+        ],
+        "exportedType": {
+          "identifier": "io.github.coquou.pet",
+          "conformsTo": [
+            "public.zip-archive"
+          ]
+        }
+      }
+    ],
+    "createUpdaterArtifacts": false,
+    "publisher": "Coquou",
+    "copyright": "© 2026 Coquou contributors",
+    "category": "Entertainment",
+    "shortDescription": "开源桌面宠物",
+    "longDescription": "Coquou 是一个开源的桌面宠物：可爱的小家伙在屏幕角落溜达，可以摸、拎、扔，兼容 Codex 宠物包，也能用 AI 孵化你自己的宠物。",
+    "homepage": "https://github.com/coquou/coquou",
+    "windows": {
+      "nsis": {
+        "languages": [
+          "SimpChinese",
+          "English"
+        ],
+        "displayLanguageSelector": false,
+        "installMode": "currentUser"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDk0RTYwMTk2OEU1NTFDRUEKUldUcUhGV09sZ0htbEd5ZzFVa3hZMjVKQmZ6M0NzOFo2UGpsajJyYTVPUU9taC9HK0dhcVpkeEMK",
+      "endpoints": [
+        "https://github.com/coquou/coquou/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}
