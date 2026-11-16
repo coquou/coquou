@@ -274,6 +274,9 @@ function renderBase(base) {
   $("finalArea").hidden = true;
 }
 
+// What the user wants changed per row, used when regenerating it.
+const notes = new Map();
+
 function renderCards() {
   const box = $("cards");
   box.innerHTML = "";
@@ -295,6 +298,15 @@ function renderCards() {
       d.innerHTML = "<summary>模型原图</summary>";
       const img = new Image(); img.src = "data:image/png;base64," + r.raw; d.append(img);
       card.append(d);
+    }
+    if (!s.mirrorOf && r.status !== "idle") {
+      const note = document.createElement("input");
+      note.type = "text"; note.className = "note"; note.maxLength = 200;
+      note.placeholder = "想怎么改（可选），比如：腿迈得再大一点";
+      note.value = notes.get(s.id) || "";
+      note.disabled = r.status === "run";
+      note.oninput = () => notes.set(s.id, note.value);
+      card.append(note);
     }
     if (!s.mirrorOf) {
       const btn = document.createElement("button"); btn.className = "btn"; btn.type = "button";
@@ -344,7 +356,7 @@ async function genRow(s, attempt = 1) {
   renderCards();
   let retry = false;
   try {
-    const prompt = HATCH.sheetPrompt(s, st.key, $("style").value);
+    const prompt = HATCH.sheetPrompt(s, st.key, $("style").value, (notes.get(s.id) || "").trim());
     const refs = [st.baseB64, ...depsOf(s).map((d) => st.rows[d].raw)];
     const raw = await generate(prompt, refs, HATCH.layoutFor(s.frames).size);
     const status = await applySheet(s, raw);

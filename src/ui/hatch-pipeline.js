@@ -79,7 +79,8 @@ const HATCH = (() => {
     ].filter(Boolean).join(" ");
   }
 
-  function sheetPrompt(state, key, style) {
+  /** `note`: what the user wants changed when regenerating a row (optional). */
+  function sheetPrompt(state, key, style, note = "") {
     const { cols, rows } = layoutFor(state.frames);
     const cells = cols * rows;
     const empty = cells > state.frames ? ` Leave the last ${cells - state.frames} cell(s) completely empty (background only).` : "";
@@ -92,17 +93,18 @@ const HATCH = (() => {
         + state.look.map((a, i) => `${i + 1}) ${DIR[a]}`).join("; ")
         + `. The second reference image shows the approved poses for up, right, down and left; reuse them and interpolate evenly between them. ${exaggerate} The feet stay planted at the same spot and scale.`;
     } else {
-      motion = `Animation "${state.id}" with ${state.frames} frames in time order: ${state.action}. Consecutive frames must flow smoothly as a loop.`;
+      motion = `Animation "${state.id}" with ${state.frames} frames in time order: ${state.action}. Every frame is a distinct pose: legs, body and head clearly change from one frame to the next while flowing smoothly as a loop.`;
     }
     return [
       "Use the character in the reference image. Keep it identical: same design, colours, proportions, outfit and art style.",
       BODY_PLAN,
       motion,
+      note ? `Requested changes from the previous attempt: ${note}.` : "",
       `Layout: a grid of ${cols} columns × ${rows} rows of equal cells; one pose per cell, read left-to-right, then top-to-bottom.${empty}`,
       "Every pose fully inside its own cell with generous padding, same character size in every cell, feet on the same ground line within each row.",
       `Style: ${STYLES[style] || STYLES.auto}.`,
       `Background: flat ${KEY_WORDS[key]} everywhere. No grid lines, no borders, no numbers, no text, no ground shadows, no motion lines, no effects detached from the body.`,
-    ].join(" ");
+    ].filter(Boolean).join(" ");
   }
 
   // ---------- image helpers ----------

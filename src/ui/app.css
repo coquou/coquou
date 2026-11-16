@@ -265,6 +265,7 @@ select { font: inherit; padding: 5px 8px; border: 1px solid var(--line-2); borde
 .hcard details { font-size: 12px; color: var(--muted); }
 .hcard details img { width: 100%; border-radius: 6px; margin-top: 4px; }
 .hcard .btn { align-self: flex-start; padding: 3px 10px; font-size: 12px; }
+.hatch .hcard input.note { font-size: 12px; padding: 5px 8px; }
 .pill { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: var(--hover); color: var(--muted); white-space: nowrap; }
 .pill.ok { color: var(--ok); } .pill.warn { color: #c98a12; } .pill.bad { color: var(--bad); } .pill.run { color: var(--accent); }
 .final { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
