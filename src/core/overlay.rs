@@ -81,6 +81,40 @@ pub fn reopen_is_pet_click<R: Runtime>(app: &AppHandle<R>) -> bool {
     app.try_state::<MouseState>().is_some_and(|s| s.0.load(Ordering::Relaxed))
 }
 
+/// macOS: clicking the pet must not bring Coquou to the front. Activating
+/// the app also raises the app window from behind other windows (the overlay
+/// can't become key, so AppKit makes the app window key instead).
+///
+/// The window server activates an app on mouse-down, before the app sees
+/// the event, unless the clicked window is marked as non-activating. Only
+/// NSPanel offers that publicly (NSWindowStyleMaskNonactivatingPanel is
+/// ignored on other windows), and the overlay is tao's NSWindow, so this
+/// sets the flag that style sets, through AppKit's private
+/// `_setPreventsActivation:` (a stopgap the maintainer approved; remove it once Tauri
+/// can create the overlay as a non-activating panel). If a macOS release
+/// drops the selector, clicks on the pet just activate Coquou again.
+/// Must run on the main thread.
+#[cfg(target_os = "macos")]
+pub fn click_without_activating(window: &WebviewWindow) {
+    use objc2::{msg_send, sel};
+    use objc2_app_kit::NSWindow;
+
+    let Ok(ptr) = window.ns_window() else {
+        log::warn!("no native overlay window; clicks on the pet will activate Coquou");
+        return;
+    };
+    // SAFETY: tao's NSWindow, which lives as long as the app; we are on the
+    // main thread (setup).
+    let w: &NSWindow = unsafe { &*(ptr as *const NSWindow) };
+    let supported: bool = unsafe { msg_send![w, respondsToSelector: sel!(_setPreventsActivation:)] };
+    if !supported {
+        log::warn!("this macOS has no _setPreventsActivation:; clicks on the pet will activate Coquou");
+        return;
+    }
+    // SAFETY: the selector exists (checked above) and takes one BOOL.
+    let _: () = unsafe { msg_send![w, _setPreventsActivation: true] };
+}
+
 /// Webview console output, written to the app log (no devtools in release
 /// builds). `level`: "info" | "warn" | "error".
 #[tauri::command]

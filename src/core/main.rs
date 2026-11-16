@@ -120,6 +120,8 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let _ = window.set_visible_on_all_workspaces(true);
     window.show()?;
     overlay::refresh_geometry(&window);
+    #[cfg(target_os = "macos")]
+    overlay::click_without_activating(&window);
     tray::build(app.handle())?;
 
     let args = parse_args(std::env::args(), &std::env::current_dir().unwrap_or_default());

@@ -100,7 +100,7 @@ target/ / gen/           编译输出（不进仓库）
 | 全屏应用时自动隐藏 | 前台普通窗口盖满所在显示器（含菜单栏）即判定全屏；不需要录屏权限 | `SHQueryUserNotificationState`（全屏、D3D 独占、演示模式） |
 | 电池供电降到 30 fps | IOKit `IOPSGetProvidingPowerSourceType` | `GetSystemPowerStatus` |
 | 多显示器 | 主窗口「通用 → 显示器」选择；把宠物拖到另一块屏松手即搬过去；拔掉显示器回到主屏，插回来再回去 | 同左 |
-| 不抢焦点 | 窗口不可聚焦，点宠物不会打断正在输入的应用 | 同左 |
+| 不抢焦点 | 窗口不可聚焦，并标记为「不激活应用」（AppKit 私有的 `_setPreventsActivation:`，公开的不激活面板样式只对 NSPanel 有效）：点宠物不会打断正在输入的应用，也不会把被挡住的主窗口带到前面 | 窗口不可聚焦，点宠物不会打断正在输入的应用 |
 
 ## 预设宠物
 
