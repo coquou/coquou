@@ -7,7 +7,7 @@
 
 const HATCH = (() => {
   const CELL_W = 192, CELL_H = 208, COLS = 8, ROWS = 11;
-  const TARGET_H = 150;   // standing body height inside a 208 px cell (room for raised arms)
+  const TARGET_H = 150;   // idle body height inside a 208 px cell (room for raised arms)
   const FOOT_PAD = 10;    // ground line distance from the cell bottom
 
   const KEY_RGB = { green: [0, 255, 0], magenta: [255, 0, 255] };
@@ -26,9 +26,13 @@ const HATCH = (() => {
     270: "to the left", 292.5: "to the left and slightly up", 315: "diagonally up-left", 337.5: "up and slightly to the left",
   };
 
+  // A character keeps its own body plan. Saying "standing" made the model
+  // stand four-legged animals up on their hind legs.
+  const BODY_PLAN = "Keep the character's body plan and natural stance: a four-legged animal stays on all four legs, a two-legged character stands; never stand an animal up on its hind legs unless the reference or notes show it that way.";
+
   // Codex v2 rows. `mirrorOf` rows are derived, not generated.
   const STATES = [
-    { id: "idle", label: "待机", row: 0, frames: 6, action: "a calm idle loop: gentle breathing and one blink, standing still, facing the viewer" },
+    { id: "idle", label: "待机", row: 0, frames: 6, action: "a calm idle loop: gentle breathing and one blink, staying in place in its natural stance, facing the viewer" },
     { id: "running-right", label: "向右走", row: 1, frames: 8, action: "walking to the RIGHT side of the picture (viewer's right), side or three-quarter view facing right, a clear alternating step cycle" },
     { id: "running-left", label: "向左走", row: 2, frames: 8, mirrorOf: "running-right" },
     { id: "waving", label: "挥手", row: 3, frames: 4, action: "a friendly greeting wave with one hand or paw: start, raise, wave, lower" },
@@ -67,7 +71,9 @@ const HATCH = (() => {
         : `Design a single cute desktop-pet character: ${description || "a friendly little mascot"}.`,
       hasReference && description ? `Notes: ${description}.` : "",
       `Style: ${STYLES[style] || STYLES.auto}.`,
-      "Full body, standing, facing the viewer, friendly neutral expression, the whole body including feet visible, centred, about 65% of the image height.",
+      hasReference ? "Keep the pose of the reference (only tidy it into a neutral idle pose)." : "",
+      BODY_PLAN,
+      "Full body, facing the viewer or in a three-quarter view, friendly neutral expression, the whole body including feet visible, centred, about 65% of the image height.",
       `Background: flat ${KEY_WORDS[key]} everywhere. Do not use that colour anywhere on the character.`,
       "No ground shadow, no text, no border, no other objects.",
     ].filter(Boolean).join(" ");
@@ -90,6 +96,7 @@ const HATCH = (() => {
     }
     return [
       "Use the character in the reference image. Keep it identical: same design, colours, proportions, outfit and art style.",
+      BODY_PLAN,
       motion,
       `Layout: a grid of ${cols} columns × ${rows} rows of equal cells; one pose per cell, read left-to-right, then top-to-bottom.${empty}`,
       "Every pose fully inside its own cell with generous padding, same character size in every cell, feet on the same ground line within each row.",
