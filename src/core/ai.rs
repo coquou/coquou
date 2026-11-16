@@ -25,9 +25,11 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Manager, Runtime};
 
-const KEYCHAIN_SERVICE: &str = "io.github.coquou.ai";
-/// Where keys lived before the app was renamed (moved on first use).
-const OLD_KEYCHAIN_SERVICES: [&str; 2] = ["io.github.pipkin.ai", "io.perchy.desktop.ai"];
+/// Keychain / Credential Manager service: the app identifier.
+const KEYCHAIN_SERVICE: &str = "io.github.coquou";
+/// Where keys lived before (moved on first use): the old app names, and
+/// `io.github.coquou.ai` before the service became the app identifier.
+const OLD_KEYCHAIN_SERVICES: [&str; 3] = ["io.github.coquou.ai", "io.github.pipkin.ai", "io.perchy.desktop.ai"];
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]

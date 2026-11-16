@@ -58,7 +58,7 @@ npx @tauri-apps/cli@2 build --debug --bundles nsis
 | Coquou 宠物 | `%APPDATA%\io.github.coquou\pets\` |
 | Codex 宠物（只读） | `%USERPROFILE%\.codex\pets\` 或 `%CODEX_HOME%\pets\` |
 | AI 配置（不含 key） | `%APPDATA%\io.github.coquou\ai-profiles.json` |
-| API key | 凭据管理器 →「Windows 凭据」，服务名 `io.github.coquou.ai` |
+| API key | 凭据管理器 →「Windows 凭据」，服务名 `io.github.coquou` |
 | 未完成的孵化 | `%APPDATA%\io.github.coquou\hatch-run\` |
 | 显示器选择 | `%APPDATA%\io.github.coquou\settings.json` |
 
@@ -112,7 +112,7 @@ npx @tauri-apps/cli@2 build --debug --bundles nsis
 | # | 操作 | 预期 |
 |---|---|---|
 | A1 | 主窗口「孵化」页 | 能正常输入、粘贴（Ctrl+V） |
-| A2 | 新建配置、保存 key | 凭据管理器里出现 `io.github.coquou.ai`；不会反复弹授权 |
+| A2 | 新建配置、保存 key | 凭据管理器里出现 `io.github.coquou`；不会反复弹授权 |
 | A3 | 在「孵化」页把一张图片拖进窗口 | 显示「松手设为参考图」，松手后出现参考图预览；拖 .pet 进来仍然是安装 |
 | A4 | 离线自测（不花钱，见下） | 控制台出现 `selftest PASS` |
 | A5 | 真实孵化一只 | 全流程完成并安装 |

@@ -125,7 +125,7 @@ python3 src/tools/build-icons.py
 | Images | 无参考图 `POST {地址}/images/generations`（JSON）；有参考图 `POST {地址}/images/edits`（multipart，`image[]`），该路径 404/405 时（如 OpenRouter）改用 `POST {地址}/images` + `input_references` 并记住 | `data[0].b64_json` 或 `data[0].url` |
 | Chat 输出图片 | `POST {地址}/chat/completions`，`modalities: ["image","text"]`，参考图作 `image_url` data URL | `choices[0].message.images[].image_url.url`；兼容服务放在 `content` 里的图片段、data URL、Markdown 链接也能取 |
 
-接口拒绝的可选参数（例如不支持透明背景）会自动去掉重试并关闭该选项；不发送 `n`。key 存系统钥匙串（服务名 `io.github.coquou.ai`），读到后在内存里缓存；请求在 Rust 侧发出，key 不进网页。
+接口拒绝的可选参数（例如不支持透明背景）会自动去掉重试并关闭该选项；不发送 `n`。key 存系统钥匙串（服务名 `io.github.coquou`，和应用标识相同；旧版存在 `io.github.coquou.ai` 下的 key 第一次用到时自动搬过来），读到后在内存里缓存；请求在 Rust 侧发出，key 不进网页。
 
 **流程**（`src/ui/hatch-pipeline.js`）：
 
