@@ -22,8 +22,6 @@
   const ua = navigator.userAgent;
   const platform = /Mac/.test(ua) ? "macos" : /Windows/.test(ua) ? "windows" : "linux";
   const keystore = platform === "windows" ? "凭据管理器" : "钥匙串";
-  const MASCOT_KEY = "preset:qiqi";
-
   // Speech lines for pets without their own (doc/pet-format.md `lines`).
   const DEFAULT_LINES = {
     hello: ["来啦～", "新的一天，一起加油！"],
@@ -90,7 +88,7 @@
   }
 
   window.Coquou = {
-    mirrorConsole, platform, keystore, MASCOT_KEY, DEFAULT_LINES,
+    mirrorConsole, platform, keystore, DEFAULT_LINES,
     CELL, COLS, ROWS, LOOK_ROWS, petBytes, petImage, petJson, loadAtlas,
   };
 })();

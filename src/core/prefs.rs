@@ -61,7 +61,7 @@ pub struct Custom {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Prefs {
-    /// The pet the user picked (pet key, e.g. "preset:qiqi").
+    /// The pet the user picked (pet key, e.g. "preset:tuantuan").
     pub pet: Option<String>,
     /// Size multiplier per pet key; missing = 1.
     pub sizes: BTreeMap<String, f64>,
@@ -323,11 +323,11 @@ mod tests {
     #[test]
     fn patch_applies_and_validates() {
         let mut p = Prefs::default();
-        patch(r#"{ "size": { "pet": "preset:qiqi", "value": 1.3 }, "activity": "lively" }"#).unwrap().apply(&mut p).unwrap();
-        assert_eq!(p.sizes.get("preset:qiqi"), Some(&1.3));
+        patch(r#"{ "size": { "pet": "preset:tuantuan", "value": 1.3 }, "activity": "lively" }"#).unwrap().apply(&mut p).unwrap();
+        assert_eq!(p.sizes.get("preset:tuantuan"), Some(&1.3));
         assert_eq!(p.activity, Activity::Lively);
         // Back to 1 drops the entry instead of storing the default.
-        patch(r#"{ "size": { "pet": "preset:qiqi", "value": 1 } }"#).unwrap().apply(&mut p).unwrap();
+        patch(r#"{ "size": { "pet": "preset:tuantuan", "value": 1 } }"#).unwrap().apply(&mut p).unwrap();
         assert!(p.sizes.is_empty());
         assert!(patch(r#"{ "size": { "pet": "x", "value": 7 } }"#).unwrap().apply(&mut p).is_err());
         assert!(patch(r#"{ "sleepAfter": 99999 }"#).unwrap().apply(&mut p).is_err());
@@ -338,15 +338,15 @@ mod tests {
     #[test]
     fn custom_name_lines_hidden() {
         let mut p = Prefs::default();
-        patch(r#"{ "custom": { "pet": "preset:qiqi", "name": "  小栖 ", "lines": { "click": ["嗨", " "] } } }"#)
+        patch(r#"{ "custom": { "pet": "preset:tuantuan", "name": "  小橘 ", "lines": { "click": ["嗨", " "] } } }"#)
             .unwrap()
             .apply(&mut p)
             .unwrap();
-        let c = &p.custom["preset:qiqi"];
-        assert_eq!(c.name.as_deref(), Some("小栖"));
+        let c = &p.custom["preset:tuantuan"];
+        assert_eq!(c.name.as_deref(), Some("小橘"));
         assert_eq!(c.lines.as_ref().unwrap()["click"], vec!["嗨".to_string()]);
         // Back to the pet's own: the entry disappears.
-        patch(r#"{ "custom": { "pet": "preset:qiqi", "name": "", "lines": {} } }"#).unwrap().apply(&mut p).unwrap();
+        patch(r#"{ "custom": { "pet": "preset:tuantuan", "name": "", "lines": {} } }"#).unwrap().apply(&mut p).unwrap();
         assert!(p.custom.is_empty());
         patch(r#"{ "custom": { "pet": "codex:x", "hidden": true } }"#).unwrap().apply(&mut p).unwrap();
         assert!(p.custom["codex:x"].hidden);

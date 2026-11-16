@@ -8,7 +8,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
-const { MASCOT_KEY, DEFAULT_LINES } = window.Coquou;
+const { DEFAULT_LINES } = window.Coquou;
 window.Coquou.mirrorConsole("overlay");
 
 const stage = document.getElementById("stage");
@@ -526,17 +526,17 @@ pet.x = nearestHome(W);
 requestAnimationFrame(frame);
 
 // ---------- start-up ----------
-// Default order: a pet the user already has (e.g. from Codex), the mascot,
-// any other pet; hidden pets only when nothing else is left.
+// Default order: a pet the user already has (e.g. from Codex), then the
+// preset; hidden pets only when nothing else is left.
 function defaultPets(pets, except) {
   const usable = pets.filter((p) => p.key !== except && !p.hidden);
   const own = usable.filter((p) => p.source !== "preset");
-  const mascot = usable.filter((p) => p.key === MASCOT_KEY);
+  const presets = usable.filter((p) => p.source === "preset");
   const hidden = pets.filter((p) => p.key !== except && p.hidden);
-  return [...own, ...mascot, ...usable, ...hidden].map((p) => p.key);
+  return [...own, ...presets, ...hidden].map((p) => p.key);
 }
 // Try the defaults without overwriting the user's remembered choice. The
-// presets ship inside the app, so ending up with nothing means a damaged
+// preset ships inside the app, so ending up with nothing means a damaged
 // install.
 async function useFallback(pets, except) {
   for (const key of defaultPets(pets, except)) if (await usePet(key, false)) return;

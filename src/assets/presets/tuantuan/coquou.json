@@ -3,9 +3,9 @@
   "author": "Coquou contributors",
   "license": "CC-BY-4.0",
   "tags": [
-    "preset"
+    "preset",
+    "ai-hatched"
   ],
-  "hd": "spritesheet@2x.webp",
   "lines": {
     "hello": [
       "团团在此！",

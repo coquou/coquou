@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn pet_names_are_single_plain_segments() {
-        assert!(plain_name("qiqi"));
+        assert!(plain_name("tuantuan"));
         assert!(plain_name("橘子-2"));
         for bad in ["", ".hidden", "..", "a/b", "a\\b", "C:", "C:foo", "x:y"] {
             assert!(!plain_name(bad), "{bad}");

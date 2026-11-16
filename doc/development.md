@@ -7,7 +7,7 @@ Coquou 是一个 [Tauri 2](https://tauri.app) 应用：Rust 后端 + 纯静态�
 - Rust stable
 - Node.js：只用来通过 `npx @tauri-apps/cli@2` 打包和生成图标
 - Python 3：开发脚本和离线自测
-- Google Chrome / Edge：生成预设宠物和图标时用无头模式渲染
+- Google Chrome / Edge：生成图标时用无头模式渲染
 - Windows 另需 Visual Studio Build Tools（C++ 桌面开发）和 WebView2，见 [testing-windows.md](testing-windows.md)
 
 ## 常用命令
@@ -33,7 +33,7 @@ npx @tauri-apps/cli@2 build --debug --bundles app   # 打一个调试版应用�
 | 参数 | 作用 |
 |---|---|
 | `--window` | 启动时打开主窗口 |
-| `--pet <key>` | 用指定宠物启动并记住，例如 `--pet preset:qiqi` |
+| `--pet <key>` | 用指定宠物启动并记住，例如 `--pet preset:tuantuan` |
 | `<文件>` | 安装 `.pet` / `.zip` / 宠物目录 |
 | `--hatch-selftest <地址> <images\|chat> [transparent] [persist]` | 孵化离线自测，见下 |
 
@@ -70,7 +70,6 @@ src/
     icons/               应用与托盘图标（source/ 是原图）
     presets/             预设宠物，随应用打包
   tools/                 开发脚本
-    build-presets.py     渲染预设宠物（presets/ 里是绘制代码）
     build-icons.py       从原图生成全部图标（icon-from-artwork.html 做图像处理）
     release.py           发版脚本，见 releasing.md
   tests/                 测试工具
@@ -105,13 +104,7 @@ target/ / gen/           编译输出（不进仓库）
 
 ## 预设宠物
 
-栖栖（`qiqi`）、棉棉（`mianmian`）和团团（`tuantuan`）用代码绘制（`src/tools/presets/`：`rig.js` 是动作系统，`characters.js` 是角色和台词，两只猫共用一套小猫身体），渲染成标准 Codex v2 图集，另附 2× 高清图集。所有宠物（预设、安装的、Codex 的）走同一个渲染器；预设随应用打包，所以一定有宠物可显示。改了绘制代码或台词后重新生成：
-
-```bash
-python3 src/tools/build-presets.py
-```
-
-输出到 `src/assets/presets/<id>/`，随应用打包；只读，不能删除或覆盖。
+团团（`tuantuan`）是用 AI 孵化（OpenRouter + gpt-image-2，参考图是早期程序绘制的团团）做出来、再加上台词的普通宠物包，放在 `src/assets/presets/tuantuan/`，随应用打包；只读，不能删除或覆盖，但和其他宠物一样能改名、改台词、隐藏。要改它就直接改目录里的文件。所有宠物（预设、安装的、Codex 的）走同一个渲染器；预设随应用打包，所以一定有宠物可显示。
 
 ## 图标
 

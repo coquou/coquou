@@ -244,8 +244,8 @@ mod tests {
 
     #[test]
     fn flag_values_are_not_files() {
-        let a = args(&["--pet", "preset:qiqi", "--window"]);
-        assert_eq!(a.pet.as_deref(), Some("preset:qiqi"));
+        let a = args(&["--pet", "preset:tuantuan", "--window"]);
+        assert_eq!(a.pet.as_deref(), Some("preset:tuantuan"));
         assert!(a.window && a.files.is_empty());
         let a = args(&["--hatch-selftest", "http://127.0.0.1:8765/v1", "images", "persist"]);
         assert_eq!(a.selftest.unwrap(), ["http://127.0.0.1:8765/v1", "images", "persist"]);

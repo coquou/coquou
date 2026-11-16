@@ -410,7 +410,7 @@ mod tests {
             }
         }
         ids.sort();
-        assert_eq!(ids, ["mianmian", "qiqi", "tuantuan"]);
+        assert_eq!(ids, ["tuantuan"]);
     }
 
     #[test]
@@ -452,9 +452,9 @@ mod tests {
     #[test]
     fn hd_outside_the_pet_is_rejected() {
         let dir = std::env::temp_dir().join(format!("coquou-test-{}", nonce()));
-        let preset = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/assets/presets/qiqi");
+        let preset = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/assets/presets/tuantuan");
         fs::create_dir_all(&dir).unwrap();
-        for f in ["pet.json", "spritesheet.webp"] {
+        for f in ["pet.json", "spritesheet.png"] {
             fs::copy(preset.join(f), dir.join(f)).unwrap();
         }
         fs::write(dir.join("coquou.json"), r#"{ "hd": "/dev/zero" }"#).unwrap();
