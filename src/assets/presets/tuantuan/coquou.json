@@ -2,6 +2,7 @@
   "format": "coquou/1",
   "author": "Coquou contributors",
   "license": "CC-BY-4.0",
+  "hd": "spritesheet@2x.png",
   "tags": [
     "preset",
     "ai-hatched"
