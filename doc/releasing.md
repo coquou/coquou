@@ -13,6 +13,7 @@ Coquou 用 Tauri 官方的 `tauri-plugin-updater` 自动更新：
 |---|---|
 | `~/.tauri/coquou-updater.key` | **更新签名私钥**，只在发版用的 Mac 上，不进仓库。**一定要备份**：丢了它，已经装好的 Coquou 就再也收不到更新（只能让用户手动重装带新公钥的版本） |
 | `~/.tauri/coquou-updater.key.pub` | 公钥，已写进 `tauri.conf.json` 的 `plugins.updater.pubkey` |
+| 钥匙串里的 `Coquou Self-Signed` 证书和私钥 | macOS 应用签名身份（见下文「让钥匙串在更新后不再弹框」），只在发版用的 Mac 上。**也要备份**：丢了只能新建一个，所有用户更新到用新证书签名的版本时，都要再点一次钥匙串授权 |
 
 私钥目前没有密码。也可以设一个密码（`npx @tauri-apps/cli@2 signer generate -w <路径> -p <密码>` 重新生成，同时更新公钥），发版时通过 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` 传入。
 
@@ -65,6 +66,12 @@ AI 接口的 key 存在钥匙串里。没有固定签名身份时，每次更新
    ```bash
    export COQUOU_SIGN_IDENTITY="Coquou Self-Signed"
    ```
+
+4. 备份：在「钥匙串访问」的「我的证书」里找到 `Coquou Self-Signed`，展开确认下面带着私钥，右键 →「导出」，存成 `.p12` 并设一个密码，和更新签名私钥放在一起保管。只导出证书（`.cer`）没有用，签名需要私钥。
+
+**换发版用的 Mac**：把 `~/.tauri/coquou-updater.key` 拷过去，在新 Mac 上双击 `.p12` 导入到「登录」钥匙串，再设好 `COQUOU_SIGN_IDENTITY`。不要在新机器上重新创建同名证书：名字一样，身份却是新的，等于换了证书。
+
+用户换 Mac 不受影响：证书不用装到用户电脑上。用户在新电脑上装好 Coquou、重新填一次 key（或用迁移助理连钥匙串一起搬过去）就行。
 
 这个证书只解决钥匙串问题。首次安装时 Gatekeeper 仍会拦（要右键 →「打开」）；要彻底解决，需要 Apple 开发者账号签名并公证。
 
