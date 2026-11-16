@@ -6,7 +6,7 @@ license = "MIT"
 build = "src/core/build.rs"
 
 [[bin]]
-name = "coquou"
+name = "Coquou"
 path = "src/core/main.rs"
 
 [build-dependencies]

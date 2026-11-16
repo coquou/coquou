@@ -86,7 +86,7 @@ TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/coquou-updater.key)" TAURI_SIGNING_PRI
   npx @tauri-apps/cli@2 build --debug --bundles app --config '{"version":"0.1.1","bundle":{"createUpdaterArtifacts":true}}'
 # 3) 用 Coquou.app.tar.gz 和 .sig 写一个 latest.json，用 python3 -m http.server 提供出来，然后：
 COQUOU_UPDATE_URL=http://127.0.0.1:8899/latest.json COQUOU_UPDATE_AUTOINSTALL=1 \
-  /tmp/coquou-e2e/Coquou.app/Contents/MacOS/coquou
+  /tmp/coquou-e2e/Coquou.app/Contents/MacOS/Coquou
 ```
 
 日志里依次出现 `update available: 0.1.0 → 0.1.1`、`update installed, restarting`，`/tmp/coquou-e2e/Coquou.app` 的版本变成 0.1.1。把更新包改坏后再试，应当出现 `signature verification failed`，并且不会安装。
