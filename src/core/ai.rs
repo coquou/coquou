@@ -20,6 +20,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 use tauri::{AppHandle, Manager, Runtime};
@@ -285,11 +286,12 @@ async fn images_with_references(p: &Profile, key: &str, prompt: &str, images: &[
         .map_err(|e| format!("连接失败：{e}"))
 }
 
-/// Returns the image and whether the `/images` + `input_references` fallback
-/// was used (so the caller can remember it on the profile).
-async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], size: &str) -> Result<(String, bool), String> {
+/// `fell_back` is set as soon as the endpoint turns out to have no
+/// `/images/edits` and `/images` + `input_references` is used instead, even
+/// if that request then fails, so the caller can remember it on the profile
+/// (and a retry doesn't probe `/images/edits` again).
+async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], size: &str, fell_back: &AtomicBool) -> Result<String, String> {
     let http = client()?;
-    let mut fell_back = false;
     let body = if !images.is_empty() && p.edits.as_deref() == Some("references") {
         images_with_references(p, key, prompt, images, size).await?
     } else if images.is_empty() {
@@ -336,7 +338,7 @@ async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], siz
         // No /images/edits here (e.g. OpenRouter): use /images + input_references.
         if matches!(resp.status().as_u16(), 404 | 405) {
             log::info!("ai: /images/edits not found, trying /images with input_references");
-            fell_back = true;
+            fell_back.store(true, Ordering::Relaxed);
             images_with_references(p, key, prompt, images, size).await?
         } else {
             resp
@@ -345,10 +347,10 @@ async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], siz
     let body = check(body).await?;
     let item = &body["data"][0];
     if let Some(b64) = item["b64_json"].as_str() {
-        return Ok((b64.to_string(), fell_back));
+        return Ok(b64.to_string());
     }
     if let Some(url) = item["url"].as_str() {
-        return Ok((fetch_b64(url).await?, fell_back));
+        return fetch_b64(url).await;
     }
     Err("返回里没有图片（data[0].b64_json / url）".into())
 }
@@ -414,12 +416,13 @@ pub async fn ai_generate(
     let profile = load(&app).into_iter().find(|p| p.id == profile_id).ok_or("找不到这个 AI 配置")?;
     let key = get_key(&profile.id).ok_or("这个配置还没有填 API key")?;
     let started = std::time::Instant::now();
+    let fell_back = AtomicBool::new(false);
     let call = |p: Profile| {
-        let (key, prompt, images, size) = (key.clone(), prompt.clone(), images.clone(), size.clone());
+        let (key, prompt, images, size, fell_back) = (key.clone(), prompt.clone(), images.clone(), size.clone(), &fell_back);
         async move {
             match p.protocol.as_str() {
-                "images" => via_images(&p, &key, &prompt, &images, &size).await,
-                _ => via_chat(&p, &key, &prompt, &images, &size).await.map(|b| (b, false)),
+                "images" => via_images(&p, &key, &prompt, &images, &size, fell_back).await,
+                _ => via_chat(&p, &key, &prompt, &images, &size).await,
             }
         }
     };
@@ -455,14 +458,16 @@ pub async fn ai_generate(
                 }
             });
             used = fixed;
+            if fell_back.load(Ordering::Relaxed) {
+                used.edits = Some("references".into());
+            }
             result = call(used.clone()).await;
         }
     }
-    if let Ok((_, true)) = &result {
+    if fell_back.load(Ordering::Relaxed) {
         learn(&|p| p.edits = Some("references".into()));
     }
     let profile = used;
-    let result = result.map(|(b64, _)| b64);
     log::info!(
         "ai {} {} refs={} size={} → {} in {:.1}s",
         profile.protocol,
