@@ -188,6 +188,7 @@ fn main() {
             settings::set_setting,
             windows::open_window,
             windows::open_link,
+            tray::show_pet_menu,
             library::overlay_ready,
             library::install_generated,
             library::install_bytes,

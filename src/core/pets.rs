@@ -65,7 +65,7 @@ fn plain_name(name: &str) -> bool {
 /// Largest pet.json read while listing.
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
-pub fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
+fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
     let mut pets = Vec::new();
     for (source, root) in roots(app) {
         let Ok(entries) = std::fs::read_dir(&root) else { continue };

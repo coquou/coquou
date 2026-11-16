@@ -129,7 +129,7 @@ pub fn app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Me
         &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
         &PredefinedMenuItem::show_all(app, Some("全部显示"))?,
         &sep()?,
-        &PredefinedMenuItem::quit(app, Some("退出 Coquou"))?,
+        &PredefinedMenuItem::quit(app, Some("退出"))?,
     ])?;
     let edit = Submenu::with_items(app, "编辑", true, &[
         &PredefinedMenuItem::undo(app, Some("撤销"))?,

@@ -153,7 +153,7 @@ pub fn forget_pet<R: Runtime>(app: &AppHandle<R>, key: &str) {
 #[derive(Default)]
 pub struct Current(Mutex<String>);
 
-pub fn current<R: Runtime>(app: &AppHandle<R>) -> String {
+fn current<R: Runtime>(app: &AppHandle<R>) -> String {
     app.try_state::<Current>().map(|c| c.0.lock().unwrap().clone()).unwrap_or_default()
 }
 
@@ -202,7 +202,6 @@ pub fn report_current_pet(app: AppHandle, state: State<Current>, key: String) {
         changed
     };
     if changed {
-        crate::tray::refresh(&app);
         broadcast(&app);
     }
 }

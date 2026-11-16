@@ -96,7 +96,8 @@ function setPassthrough(on) {
 }
 
 stage.addEventListener("pointerdown", (e) => {
-  if (!hitTest(e.clientX, e.clientY)) return;
+  // Only a plain primary press drags; right / Ctrl-click opens the menu below.
+  if (e.button !== 0 || e.ctrlKey || !hitTest(e.clientX, e.clientY)) return;
   stage.setPointerCapture(e.pointerId);
   drag = { offX: e.clientX - pet.x, offY: e.clientY - pet.y, samples: [[e.clientX, e.clientY, performance.now() / 1000]], moved: 0 };
   stage.style.cursor = "grabbing";
@@ -135,6 +136,13 @@ stage.addEventListener("pointerup", (e) => {
   const clamp = (v) => Math.max(-3000, Math.min(3000, v));
   pet.vx = clamp((b[0] - a[0]) / dt); pet.vy = clamp((b[1] - a[1]) / dt);
   setState("air");
+});
+
+// Right-click on the pet: the same menu as the tray (tray.rs).
+stage.addEventListener("contextmenu", (e) => {
+  e.preventDefault();
+  if (drag || !hitTest(e.clientX, e.clientY)) return;
+  invoke("show_pet_menu").catch((err) => console.warn("pet menu", err));
 });
 
 async function hopScreens() {
@@ -543,7 +551,7 @@ async function useFallback(pets, except) {
     invoke("open_window", { name: "app" }).catch(() => {});
     const mac = /Mac/.test(navigator.userAgent);
     setTimeout(() => say(mac
-      ? "你好呀！我住在屏幕右上角的菜单栏里，点那里的图标可以换宠物、叫我回来"
-      : "你好呀！我住在屏幕右下角的通知区域，单击图标打开主窗口，右键换宠物、叫我回来", 8), 1500);
+      ? "你好呀！我住在屏幕右上角的菜单栏里，点那里的图标或者右键点我，可以叫我回来、哄我睡觉"
+      : "你好呀！我住在屏幕右下角的通知区域，单击图标打开主窗口，右键图标或者右键点我，可以叫我回来、哄我睡觉", 8), 1500);
   }
 })();

@@ -41,13 +41,12 @@ fn scratch<R: Runtime>(app: &AppHandle<R>, stem: &str, ext: &str) -> Result<Path
     Ok(dir.join(format!("{stem}-{}-{n}{ext}", std::process::id())))
 }
 
-/// Install one pet, announce it (`pet-installed`) and refresh the tray.
+/// Install one pet and announce it (`pet-installed`).
 fn install_one<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<Installed, String> {
     let done = install::install(app, path)?;
     log::info!("installed {} from {}", done.key, path.display());
     set_pending(app, done.key.clone());
     let _ = app.emit("pet-installed", done.clone());
-    crate::tray::refresh(app);
     Ok(done)
 }
 
@@ -187,7 +186,6 @@ pub fn delete_pet(app: AppHandle, key: String) -> Result<(), String> {
     std::fs::remove_dir_all(&dir).map_err(|e| format!("删除失败：{e}"))?;
     log::info!("deleted {key}");
     crate::prefs::forget_pet(&app, &key);
-    crate::tray::refresh(&app);
     let _ = app.emit("pets-changed", serde_json::json!({ "removed": key }));
     Ok(())
 }
