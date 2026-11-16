@@ -93,7 +93,7 @@ function hitTest(x, y) {
 function setPassthrough(on) {
   if (on === passthrough) return;
   passthrough = on;
-  invoke("set_passthrough", { enabled: on });
+  invoke("set_passthrough", { enabled: on }).catch((e) => console.warn("passthrough", e));
   stage.style.cursor = on ? "default" : "grab";
 }
 

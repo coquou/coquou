@@ -10,6 +10,7 @@
 //! another app is fullscreen there and reports battery power (`power`).
 
 use serde::Serialize;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State, WebviewWindow};
@@ -56,10 +57,28 @@ pub fn cursor_local(window: WebviewWindow) -> Option<(f64, f64)> {
     cursor_in(&window)
 }
 
+/// Whether the overlay is catching the mouse, i.e. the cursor is over the
+/// pet (or dragging it).
+#[derive(Default)]
+pub struct MouseState(AtomicBool);
+
 /// `true` → clicks fall through to the windows below; `false` → we catch them.
 #[tauri::command]
-pub fn set_passthrough(window: WebviewWindow, enabled: bool) {
-    let _ = window.set_ignore_cursor_events(enabled);
+pub fn set_passthrough(window: WebviewWindow, state: State<MouseState>, enabled: bool) -> Result<(), String> {
+    if window.label() != LABEL {
+        return Err("only the pet window has pass-through".into());
+    }
+    window.set_ignore_cursor_events(enabled).map_err(|e| e.to_string())?;
+    state.0.store(!enabled, Ordering::Relaxed);
+    Ok(())
+}
+
+/// macOS 14+ also sends "reopen" when a click on one of our windows brings
+/// Coquou to the front, so a click on the pet looks like clicking Coquou in
+/// Finder. Such a click can only land on the pet while the overlay catches
+/// the mouse; a launch from Finder / Launchpad never does.
+pub fn reopen_is_pet_click<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.try_state::<MouseState>().is_some_and(|s| s.0.load(Ordering::Relaxed))
 }
 
 /// Webview console output, written to the app log (no devtools in release

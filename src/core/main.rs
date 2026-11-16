@@ -175,6 +175,7 @@ fn main() {
         .manage(library::Dropped::default())
         .manage(overlay::PowerState::default())
         .manage(overlay::GeometryState::default())
+        .manage(overlay::MouseState::default())
         .manage(prefs::Current::default())
         .invoke_handler(tauri::generate_handler![
             overlay::cursor_local,
@@ -218,9 +219,10 @@ fn main() {
         .expect("error while building Coquou");
 
     app.run(|app, event| match event {
-        // macOS: clicking Coquou in Finder / Launchpad while it runs.
+        // macOS: clicking Coquou in Finder / Launchpad while it runs (but not
+        // a click on the pet, which macOS reports the same way).
         #[cfg(target_os = "macos")]
-        tauri::RunEvent::Reopen { .. } => windows::open_app(app, None),
+        tauri::RunEvent::Reopen { .. } if !overlay::reopen_is_pet_click(app) => windows::open_app(app, None),
         // macOS delivers double-clicked files as an "open URLs" event.
         #[cfg(target_os = "macos")]
         tauri::RunEvent::Opened { urls } => {
