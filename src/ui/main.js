@@ -8,7 +8,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
-const { BUILTIN, MASCOT_KEY } = window.Coquou;
+const { MASCOT_KEY, DEFAULT_LINES } = window.Coquou;
 window.Coquou.mirrorConsole("overlay");
 
 const stage = document.getElementById("stage");
@@ -16,7 +16,9 @@ const ctx = stage.getContext("2d");
 
 // The pet is drawn into a small sprite buffer first; hit tests read alpha
 // from this buffer, so only opaque pet pixels catch the mouse.
-let renderer = window.builtinRenderer; // see cat.js / sprite.js
+// Nothing is drawn until the first pet has loaded (renderers: sprite.js).
+const NO_PET = { name: "", S: 1, FOOT: 0, width: 0, height: 0, lines: null, has: () => false, draw() {} };
+let renderer = NO_PET;
 const buf = document.createElement("canvas");
 const bctx = buf.getContext("2d", { willReadFrequently: true });
 
@@ -191,22 +193,14 @@ let bubble = null;
 const bubbleQueue = [];
 function say(text, seconds) { bubbleQueue.push({ text, seconds }); }
 
-// Lines for pets without their own (coquou.json `lines`, see doc/pet-format.md).
-const DEFAULT_LINES = {
-  hello: ["来啦～", "新的一天，一起加油！"],
-  click: ["干嘛呀～", "嘿嘿", "被发现了！"],
-  pet: ["好舒服～", "再摸摸嘛", "嘿嘿嘿"],
-  wake: ["唔……谁吵我", "我没睡着！"],
-  held: ["哇！放我下来！", "好高呀"],
-  idle: ["休息一下眼睛吧", "记得喝水哦", "我就在这儿陪你"],
-};
 const CHAT_GAP = 6; // s between two lines
 let lastChat = -100, nextIdleChat = 120;
 function chat(kind, force = false) {
   if (!prefs.chatter) return;
   if (bubble || bubbleQueue.length) return;
   if (!force && clock - lastChat < CHAT_GAP) return;
-  const pool = renderer.lines?.[kind] ?? DEFAULT_LINES[kind];
+  // The user's lines (prefs `custom`), else the pet's own (coquou.json), else the defaults.
+  const pool = prefs.custom?.[petKey]?.lines?.[kind] ?? renderer.lines?.[kind] ?? DEFAULT_LINES[kind];
   if (!pool?.length) return;
   lastChat = clock;
   bubble = { text: pool[Math.floor(Math.random() * pool.length)], until: clock + 3.2 };
@@ -248,6 +242,20 @@ function drawBubble() {
   ctx.globalAlpha = 1;
 }
 
+// Reactions every pet shares, applied around its renderer (feet at the
+// origin): swinging while held or thrown, pivoting at mid-body, and a squash
+// on landing unless the pet brings its own landing animation.
+function bodyMotion(g) {
+  if (pet.state === "held" || pet.state === "air") {
+    const mid = -renderer.height / 2;
+    g.translate(0, mid); g.rotate(Math.max(-0.4, Math.min(0.4, pet.swing))); g.translate(0, -mid);
+  }
+  if (pet.state === "land" && !renderer.has("land")) {
+    const k = Math.max(0, 1 - pet.stateT / 0.28);
+    g.scale(1 + 0.12 * k, 1 - 0.15 * k);
+  }
+}
+
 // ---------- pet commands (tray, app window) ----------
 listen("pet-command", ({ payload }) => {
   touch(clock);
@@ -261,7 +269,7 @@ listen("pet-command", ({ payload }) => {
 });
 
 // ---------- size (remembered per pet) ----------
-let baseRenderer = renderer, petKey = BUILTIN.key, sizeMul = 1;
+let baseRenderer = renderer, petKey = "", sizeMul = 1;
 function scaled(r, mul) {
   if (mul === 1) return r;
   return {
@@ -328,18 +336,16 @@ let loadSeq = 0;
 // overwrite the user's own choice.
 async function usePet(key, remember = true) {
   const seq = ++loadSeq;
-  let next = window.builtinRenderer;
-  if (key !== BUILTIN.key) {
-    try {
-      const entry = (await invoke("list_pets")).find((p) => p.key === key);
-      if (!entry) throw new Error(`pet ${key} not found`);
-      next = await window.loadSpritePet(entry);
-    } catch (e) {
-      if (seq !== loadSeq) return false;
-      console.error("failed to load pet", key, e);
-      emit("?", "#ff6b6b", 28, pet.x, pet.y - renderer.height - 20, 0, -40, 1.2);
-      return false;
-    }
+  let next;
+  try {
+    const entry = (await invoke("list_pets")).find((p) => p.key === key);
+    if (!entry) throw new Error(`pet ${key} not found`);
+    next = await window.loadSpritePet(entry);
+  } catch (e) {
+    if (seq !== loadSeq) return false;
+    console.error("failed to load pet", key, e);
+    emit("?", "#ff6b6b", 28, pet.x, pet.y - renderer.height - 20, 0, -40, 1.2);
+    return false;
   }
   if (seq !== loadSeq) return false; // superseded by a newer switch
   baseRenderer = next;
@@ -482,7 +488,7 @@ function frame(now) {
   bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const { S, FOOT } = renderer;
   bctx.clearRect(0, 0, S, S);
-  bctx.save(); bctx.translate(S / 2, S - FOOT); renderer.draw(bctx, pet, clock); bctx.restore();
+  bctx.save(); bctx.translate(S / 2, S - FOOT); bodyMotion(bctx); renderer.draw(bctx, pet, clock); bctx.restore();
 
   const hovering = cursor ? hitTest(cursor[0], cursor[1]) : false;
   pet.dropHover = dropHover;
@@ -521,17 +527,21 @@ requestAnimationFrame(frame);
 
 // ---------- start-up ----------
 // Default order: a pet the user already has (e.g. from Codex), the mascot,
-// any other pet, the built-in cat.
+// any other pet; hidden pets only when nothing else is left.
 function defaultPets(pets, except) {
-  const usable = pets.filter((p) => p.key !== except);
+  const usable = pets.filter((p) => p.key !== except && !p.hidden);
   const own = usable.filter((p) => p.source !== "preset");
   const mascot = usable.filter((p) => p.key === MASCOT_KEY);
-  return [...own, ...mascot, ...usable].map((p) => p.key);
+  const hidden = pets.filter((p) => p.key !== except && p.hidden);
+  return [...own, ...mascot, ...usable, ...hidden].map((p) => p.key);
 }
-// Try the defaults without overwriting the user's remembered choice.
+// Try the defaults without overwriting the user's remembered choice. The
+// presets ship inside the app, so ending up with nothing means a damaged
+// install.
 async function useFallback(pets, except) {
   for (const key of defaultPets(pets, except)) if (await usePet(key, false)) return;
-  await usePet(BUILTIN.key, false);
+  console.error("no pet could be loaded");
+  say("一只宠物都加载不出来，安装可能损坏了，请重新安装 Coquou", 30);
 }
 
 // Pet: one installed or named with --pet before the page was listening,

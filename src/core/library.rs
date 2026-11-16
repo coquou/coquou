@@ -74,8 +74,8 @@ pub fn install_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
     }
 }
 
-/// Save a pet assembled on the hatch page (Codex v2 PNG atlas + optional
-/// coquou.json), then install it through the same validated path as a .pet.
+/// Save a pet assembled on the hatch page (Codex v2 PNG atlas, its 2× HD copy,
+/// optional coquou.json), then install it through the same validated path as a .pet.
 #[tauri::command(async)]
 pub fn install_generated(
     app: AppHandle,
@@ -83,6 +83,7 @@ pub fn install_generated(
     display_name: String,
     description: String,
     spritesheet_png: String,
+    hd_png: String,
     coquou_json: Option<String>,
 ) -> Result<Installed, String> {
     let dir = scratch(&app, "hatched", "")?;
@@ -98,6 +99,8 @@ pub fn install_generated(
         let write = |name: &str, bytes: &[u8]| std::fs::write(dir.join(name), bytes).map_err(|e| e.to_string());
         write("pet.json", serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?.as_bytes())?;
         write("spritesheet.png", &B64.decode(spritesheet_png).map_err(|e| e.to_string())?)?;
+        // The 2× copy named by coquou.json `hd`; install checks its size.
+        write("spritesheet@2x.png", &B64.decode(hd_png).map_err(|e| e.to_string())?)?;
         if let Some(ext) = coquou_json {
             write("coquou.json", ext.as_bytes())?;
         }

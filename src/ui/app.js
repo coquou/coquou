@@ -9,7 +9,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
 
-const { BUILTIN, ROWS, CELL, platform } = window.Coquou;
+const { ROWS, CELL, platform, DEFAULT_LINES } = window.Coquou;
 window.Coquou.mirrorConsole("app");
 const $ = (id) => document.getElementById(id);
 const usePet = (key) => emit("pet-command", "pet:" + key);
@@ -28,24 +28,24 @@ const ZONES = [
   ["left", "左下角", "只在左边", [[0, 26]]],
   ["full", "整个底部", "可以走到中间", [[0, 120]]],
 ];
-const SOURCE = { builtin: "内置", preset: "预设", coquou: "我的", codex: "Codex" };
-const FILTERS = [["all", "全部"], ["preset", "预设"], ["coquou", "我的"], ["codex", "Codex"]];
+const SOURCE = { preset: "预设", coquou: "我的", codex: "Codex" };
+const FILTERS = [["all", "全部"], ["preset", "预设"], ["coquou", "我的"], ["codex", "Codex"], ["hidden", "已隐藏"]];
+// Occasions a pet speaks on (prefs.rs / install.rs LINE_KINDS).
+const LINE_KINDS = [["hello", "打招呼"], ["click", "被点"], ["pet", "被摸"], ["wake", "被吵醒"], ["held", "被拎起来"], ["idle", "闲着没事"]];
 
 // Preview chips: Codex row names (common.js ROWS) and their labels.
 const CHIPS = [["idle", "待机"], ["running-right", "走路"], ["waving", "挥手"], ["jumping", "跳跃"], ["running", "干活"], ["review", "思考"], ["failed", "难过"]];
-// The built-in cat draws states, not rows.
-const BUILTIN_CHIPS = [["idle", "待机"], ["running-right", "走路"], ["waving", "开心"], ["sleep", "睡觉"]];
-const BUILTIN_STATE = { "running-right": "walk", sleep: "sleep" };
 
 document.documentElement.classList.add(platform === "macos" ? "mac" : platform);
 
 // Last `prefs` view: saved prefs + `current` (pet on screen) + its `size`.
-let ui = { current: "", size: 1, zone: "corners", activity: "normal", sleepAfter: 45, chatter: true, welcomeDismissed: true };
+let ui = { current: "", size: 1, custom: {}, zone: "corners", activity: "normal", sleepAfter: 45, chatter: true, welcomeDismissed: true };
 let pets = [];          // [{ key, id, displayName, source, ... }]
 let selected = null;    // key shown in the detail panel
 let filter = "all";
 let query = "";
 let chip = "idle";
+let linesOpen = false;  // keep the lines editor open across redraws
 let settings = null;
 
 // ---------- small helpers ----------
@@ -98,7 +98,7 @@ listen("app-page", ({ payload }) => showPage(payload));
 $("now").onclick = () => { showPage("pets"); select(ui.current); };
 
 // ---------- pet art ----------
-const art = new Map();   // key → Promise<{ img, k, rows, ext, manifest } | { builtin: true }>
+const art = new Map();   // key → Promise<{ img, k, rows, ext, manifest }>
 const ready = new Map(); // key → the resolved value, for the animation loop
 
 // Load (once) what the previews need; the HD atlas when the pet has one.
@@ -106,32 +106,17 @@ function loadArt(key) {
   if (!art.has(key)) {
     const entry = pets.find((p) => p.key === key);
     if (!entry) return Promise.reject(new Error(`unknown pet ${key}`));
-    const load = key === BUILTIN.key
-      ? Promise.resolve({ builtin: true })
-      : window.Coquou.loadAtlas(entry).then((a) => ({ img: a.hd ?? a.atlas, k: a.hd ? a.hk : 1, rows: a.rows, ext: a.ext, manifest: a.manifest }));
+    const load = window.Coquou.loadAtlas(entry)
+      .then((a) => ({ img: a.hd ?? a.atlas, k: a.hd ? a.hk : 1, rows: a.rows, ext: a.ext, manifest: a.manifest }));
     art.set(key, load.then((a) => { ready.set(key, a); return a; }, (e) => { art.delete(key); throw e; }));
   }
   return art.get(key);
 }
 
-// A stand-in pet object for drawing the built-in cat in previews.
-const fakePet = (state, t, happy = false) => ({
-  state, facing: 1, stateT: t % 2, swing: 0, blinkUntil: (t % 3.2) < 0.15 ? t + 1 : 0, look: null,
-  loved: happy ? t + 1 : 0, faceOverride: happy ? { face: "happy", until: t + 1 } : null, dropHover: false,
-});
-
 // Draw one frame of `anim` at time t (seconds) into canvas g (w×h).
 function paint(g, a, anim, t, w, h, crop = true) {
   g.clearRect(0, 0, w, h);
   if (!a) return;
-  if (a.builtin) {
-    g.save();
-    g.translate(w / 2, h * 0.86);
-    g.scale(w / 150, w / 150);
-    window.builtinRenderer.draw(g, fakePet(BUILTIN_STATE[anim] ?? "idle", t, anim === "waving"), t);
-    g.restore();
-    return;
-  }
   const [row, durs] = ROWS[anim] || ROWS.idle;
   const total = durs.reduce((x, y) => x + y, 0);
   let ms = (t * 1000) % total, f = 0;
@@ -145,14 +130,17 @@ function paint(g, a, anim, t, w, h, crop = true) {
 }
 
 // ---------- library ----------
+// Hidden pets only show under their own filter.
+const inFilter = (p, f) => (f === "hidden" ? p.hidden : !p.hidden && (f === "all" || p.source === f));
 function visible() {
   const q = query.trim().toLowerCase();
-  return pets.filter((p) => (filter === "all" || p.source === filter)
+  return pets.filter((p) => inFilter(p, filter)
     && (!q || p.displayName.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)));
 }
 
 function renderFilters() {
-  const counts = Object.fromEntries(FILTERS.map(([k]) => [k, k === "all" ? pets.length : pets.filter((p) => p.source === k).length]));
+  const counts = Object.fromEntries(FILTERS.map(([k]) => [k, pets.filter((p) => inFilter(p, k)).length]));
+  if (filter !== "all" && !counts[filter]) filter = "all";
   segmented($("filters"), FILTERS.filter(([k]) => k === "all" || counts[k]).map(([k, l]) => [k, `${l} ${counts[k]}`]), filter, (v) => {
     filter = v; renderFilters(); renderGrid();
   });
@@ -196,7 +184,7 @@ async function renderDetail() {
   box.hidden = false;
   const a = await loadArt(p.key).catch(() => null);
   if (p.key !== selected) return;
-  const chips = p.key === BUILTIN.key ? BUILTIN_CHIPS : CHIPS.filter(([k]) => ROWS[k][0] < (a?.rows || 9));
+  const chips = CHIPS.filter(([k]) => ROWS[k][0] < (a?.rows || 9));
   if (!chips.some(([k]) => k === chip)) chip = "idle";
   stage = el("canvas", { width: 460, height: 500 });
   const chipBox = el("div", { className: "chips" });
@@ -211,22 +199,69 @@ async function renderDetail() {
   use.onclick = () => { if (!current) usePet(p.key); };
 
   const ext = a?.ext || {};
-  const desc = a?.manifest?.description || (p.key === BUILTIN.key ? "Coquou 自带的程序绘制小猫，不需要任何素材文件。" : "");
+  const desc = a?.manifest?.description || "";
+  const mine = ui.custom?.[p.key] || {};
+
+  // Name: edited in place; empty (or the pet's own name) goes back to its own.
+  const title = el("h2", { textContent: p.displayName });
+  const rename = el("button", { className: "btn ghost", type: "button", textContent: "改名" });
+  const nameRow = el("div", { className: "name-row" }, title, rename);
+  rename.onclick = () => {
+    const input = el("input", { type: "text", value: p.displayName, maxLength: 24, placeholder: p.ownName });
+    let finished = false;
+    const done = (save) => {
+      if (finished) return;
+      finished = true;
+      const name = input.value.trim();
+      if (save && name !== p.displayName) setPrefs({ custom: { pet: p.key, name: name === p.ownName ? "" : name } });
+      else nameRow.replaceChildren(title, rename);
+    };
+    input.onkeydown = (e) => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); };
+    input.onblur = () => done(true);
+    nameRow.replaceChildren(input);
+    input.focus(); input.select();
+  };
+
+  // Lines: one per row; only occasions that differ from the pet's own are saved.
+  const ownLines = (kind) => ext.lines?.[kind] ?? DEFAULT_LINES[kind];
+  const areas = {};
+  const linesBox = el("details", { className: "lines", open: linesOpen },
+    el("summary", { textContent: mine.lines ? "台词（已改过）" : "台词" }));
+  linesBox.ontoggle = () => (linesOpen = linesBox.open);
+  for (const [kind, label] of LINE_KINDS) {
+    const list = mine.lines?.[kind] ?? ownLines(kind);
+    areas[kind] = el("textarea", { rows: Math.min(6, Math.max(2, list.length)), value: list.join("\n") });
+    linesBox.append(el("label", {}, el("span", { textContent: label }), areas[kind]));
+  }
+  const saveLines = el("button", { className: "btn", type: "button", textContent: "保存台词" });
+  saveLines.onclick = () => {
+    const lines = {};
+    for (const [kind] of LINE_KINDS) {
+      const list = areas[kind].value.split("\n").map((t) => t.trim()).filter(Boolean);
+      if (list.join("\n") !== ownLines(kind).join("\n")) lines[kind] = list;
+    }
+    setPrefs({ custom: { pet: p.key, lines } }).then((v) => v && toast("台词已保存"));
+  };
+  const resetLines = el("button", { className: "btn ghost", type: "button", textContent: "恢复原来的台词", disabled: !mine.lines });
+  resetLines.onclick = () => setPrefs({ custom: { pet: p.key, lines: {} } });
+  linesBox.append(el("div", { className: "row" }, saveLines, resetLines));
   const meta = el("dl", { className: "meta" });
   const add = (k, v) => { if (v) meta.append(el("dt", { textContent: k }), el("dd", { textContent: v })); };
-  add("来源", { builtin: "内置", preset: "Coquou 预设", coquou: "安装在 Coquou", codex: "Codex 宠物（只读）" }[p.source]);
+  add("来源", { preset: "Coquou 预设", coquou: "安装在 Coquou", codex: "Codex 宠物（只读）" }[p.source]);
+  if (p.displayName !== p.ownName) add("原名", p.ownName);
   add("作者", ext.author);
   add("授权", ext.license);
   add("ID", p.id);
 
   const more = el("div", { className: "more" });
-  if (p.key !== BUILTIN.key) {
-    const exp = el("button", { className: "btn ghost", type: "button", textContent: "导出 .pet" });
-    exp.onclick = () => invoke("export_pet", { key: p.key }).then((f) => toast(`已导出到「下载」：${f}`)).catch((e) => toast("导出失败：" + e, true));
-    const reveal = el("button", { className: "btn ghost", type: "button", textContent: platform === "macos" ? "在访达中显示" : "打开所在文件夹" });
-    reveal.onclick = () => invoke("reveal_pet", { key: p.key }).catch((e) => toast(String(e), true));
-    more.append(exp, reveal);
-  }
+  const exp = el("button", { className: "btn ghost", type: "button", textContent: "导出 .pet" });
+  exp.onclick = () => invoke("export_pet", { key: p.key }).then((f) => toast(`已导出到「下载」：${f}`)).catch((e) => toast("导出失败：" + e, true));
+  const reveal = el("button", { className: "btn ghost", type: "button", textContent: platform === "macos" ? "在访达中显示" : "打开所在文件夹" });
+  reveal.onclick = () => invoke("reveal_pet", { key: p.key }).catch((e) => toast(String(e), true));
+  const hide = el("button", { className: "btn ghost", type: "button", textContent: p.hidden ? "取消隐藏" : "隐藏" });
+  hide.onclick = () => setPrefs({ custom: { pet: p.key, hidden: !p.hidden } })
+    .then((v) => v && toast(p.hidden ? `「${p.displayName}」回到列表了` : `已隐藏「${p.displayName}」，可以在「已隐藏」里找回`));
+  more.append(exp, reveal, hide);
   if (p.source === "coquou") {
     const del = el("button", { className: "btn ghost danger", type: "button", textContent: "删除" });
     del.onclick = async () => {
@@ -239,7 +274,7 @@ async function renderDetail() {
   const children = [
     el("div", { className: "stage" }, stage),
     chipBox,
-    el("h2", { textContent: p.displayName }),
+    nameRow,
     el("div", { className: "src", textContent: SOURCE[p.source] || p.source }),
     desc ? el("p", { className: "desc", textContent: desc }) : null,
     use,
@@ -249,7 +284,7 @@ async function renderDetail() {
     segmented(sizes, SIZES, String(ui.size), setSize);
     children.push(el("div", { className: "sizes" }, el("span", { textContent: "大小" }), sizes));
   }
-  children.push(meta, more);
+  children.push(linesBox, meta, more);
   box.replaceChildren(...children.filter(Boolean));
 }
 
@@ -263,9 +298,8 @@ function select(key) {
 
 async function loadPets() {
   const list = await invoke("list_pets").catch(() => []);
-  const order = { preset: 0, coquou: 1, codex: 2, builtin: 3 };
-  pets = [...list, { key: BUILTIN.key, id: BUILTIN.key, displayName: BUILTIN.name, source: "builtin" }]
-    .sort((a, b) => order[a.source] - order[b.source]);
+  const order = { preset: 0, coquou: 1, codex: 2 };
+  pets = list.sort((a, b) => order[a.source] - order[b.source]);
   if (!pets.some((p) => p.key === selected)) selected = pets.some((p) => p.key === ui.current) ? ui.current : pets[0]?.key;
   renderFilters();
   renderGrid();
@@ -285,7 +319,7 @@ function tick(now) {
     if (stage && ready.has(selected)) paint(stage.getContext("2d"), ready.get(selected), chip, t, stage.width, stage.height);
     if (hovered && cardCanvases.has(hovered) && ready.has(hovered)) {
       const c = cardCanvases.get(hovered);
-      paint(c.getContext("2d"), ready.get(hovered), hovered === BUILTIN.key ? "running-right" : "waving", t, c.width, c.height);
+      paint(c.getContext("2d"), ready.get(hovered), "waving", t, c.width, c.height);
     }
     const nc = $("nowThumb");
     if (ready.has(ui.current)) paint(nc.getContext("2d"), ready.get(ui.current), "idle", t, nc.width, nc.height);
@@ -414,7 +448,9 @@ listen("update-progress", ({ payload }) => {
 // ---------- live updates ----------
 function applyPrefs(next) {
   const petChanged = next.current !== ui.current;
+  const customChanged = JSON.stringify(next.custom) !== JSON.stringify(ui.custom);
   ui = next;
+  if (customChanged) loadPets(); // names and hidden flags come with the list
   renderWelcome();
   renderBehaviour();
   renderNow();

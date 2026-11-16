@@ -102,10 +102,7 @@ async function loadSpritePet(entry) {
     }
     // Cells of a different size keep the same relative anchor.
     const ax = anchor.x * (scw / cw), ay = anchor.y * (sch / ch);
-    let sqx = 1, sqy = 1;
-    if (p.state === "land" && !has("land")) { const k = Math.max(0, 1 - p.stateT / 0.28); sqy = 1 - 0.15 * k; sqx = 1 + 0.12 * k; }
     g.save();
-    g.scale(sqx, sqy);
     g.imageSmoothingQuality = "high";
     if (img === atlas && hd) g.drawImage(hd, sx * hk, sy * hk, scw * hk, sch * hk, -ax * scale, -ay * scale, scw * scale, sch * scale);
     else g.drawImage(img, sx, sy, scw, sch, -ax * scale, -ay * scale, scw * scale, sch * scale);
@@ -118,6 +115,7 @@ async function loadSpritePet(entry) {
     width: box.w * scale,
     height: (anchor.y - box.top) * scale,
     lines: ext?.lines || null,
+    has, // the overlay skips its own effect where the pet has an animation
     draw,
   };
 }

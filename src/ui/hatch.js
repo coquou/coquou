@@ -15,8 +15,9 @@ const st = {
   refB64: null, refData: null,
   key: "green",
   baseB64: null,
-  rows: {},        // id → { status, cells, warnings, raw, error }
+  rows: {},        // id → { status, frames, cells, places, warnings, raw, error }
   atlasB64: null,
+  hdB64: null,
 };
 
 function setStatus(el, text, kind = "") {
@@ -310,8 +311,8 @@ function renderCards() {
 function relayout() {
   const frames = {};
   for (const [id, r] of Object.entries(st.rows)) if (r.frames) frames[id] = r.frames;
-  const cells = HATCH.layoutAll(frames);
-  for (const [id, c] of Object.entries(cells)) if (st.rows[id]) st.rows[id].cells = c;
+  const laid = HATCH.layoutAll(frames);
+  for (const [id, { cells, places }] of Object.entries(laid)) if (st.rows[id]) Object.assign(st.rows[id], { cells, places });
 }
 
 const ready = (id) => ["ok", "warn"].includes(st.rows[id]?.status);
@@ -412,15 +413,16 @@ async function buildFinal() {
   const seq = ++buildSeq;
   relayout();
   const rows = {};
-  for (const s of S) if (s.row != null) rows[s.row] = st.rows[s.id]?.cells;
+  for (const s of S) if (s.row != null) rows[s.row] = st.rows[s.id]?.places ?? [];
   // Without generated look rows, every direction shows the first idle frame.
   if (!$("withLook").checked) {
-    const idle = st.rows["idle"].cells[0];
+    const idle = st.rows["idle"].places[0];
     rows[9] = Array(8).fill(idle); rows[10] = Array(8).fill(idle);
   }
-  const { canvas, b64 } = await HATCH.composeAtlas(rows);
+  const [{ canvas, b64 }, hd] = await Promise.all([HATCH.composeAtlas(rows), HATCH.composeAtlas(rows, 2)]);
   if (seq !== buildSeq) return; // a newer build superseded this one
   st.atlasB64 = b64;
+  st.hdB64 = hd.b64;
   const view = $("atlas").getContext("2d");
   view.clearRect(0, 0, 1536, 2288); view.drawImage(canvas, 0, 0);
   if (!$("petId").value) $("petId").value = slug($("petName").value);
@@ -441,7 +443,8 @@ async function install() {
       displayName: $("petName").value.trim() || $("petId").value.trim(),
       description: $("petDesc").value.trim() || "AI hatched pet",
       spritesheetPng: st.atlasB64,
-      coquouJson: JSON.stringify({ format: "coquou/1", tags: ["ai-hatched"], generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model } }, null, 2),
+      hdPng: st.hdB64,
+      coquouJson: JSON.stringify({ format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model } }, null, 2),
     });
     setStatus(el, `${done.replaced ? "已更新" : "已安装"}「${done.displayName}」，桌宠已经换成它了。`, "ok");
     window.coquouHatchPending?.(false);
@@ -500,7 +503,7 @@ async function selftest() {
         if (raw && run.images["row-" + k] !== raw) console.warn("selftest stored sheet differs:", k);
       if (run.images.base !== st.baseB64) console.warn("selftest stored base differs");
       const rows = Object.keys(run?.images || {}).filter((k) => k.startsWith("row-")).length;
-      st.rows = {}; st.baseB64 = null; st.atlasB64 = null;
+      st.rows = {}; st.baseB64 = null; st.atlasB64 = null; st.hdB64 = null;
       await restoreRun(run);
       await buildFinal();
       console.info("selftest resume", st.atlasB64 === before ? "OK" : "MISMATCH", `stored rows=${rows}`);

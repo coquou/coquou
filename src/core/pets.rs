@@ -19,7 +19,13 @@ use tauri::{AppHandle, Manager, Runtime};
 pub struct PetEntry {
     pub key: String,
     pub id: String,
+    /// The user's name for the pet (prefs `custom`), else its own.
     pub display_name: String,
+    /// The pet's own displayName from pet.json.
+    pub own_name: String,
+    /// Hidden by the user: left out of automatic pet choices and, in the app
+    /// window, of the default list.
+    pub hidden: bool,
     pub source: &'static str,
     /// The extension file the pet has (`coquou.json`, or the legacy
     /// `perchy.json`), so the frontend never has to probe for it.
@@ -66,6 +72,7 @@ fn plain_name(name: &str) -> bool {
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 
 fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
+    let custom = crate::settings::get(app).prefs.custom;
     let mut pets = Vec::new();
     for (source, root) in roots(app) {
         let Ok(entries) = std::fs::read_dir(&root) else { continue };
@@ -83,11 +90,15 @@ fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
             let Ok(text) = std::fs::read_to_string(manifest_path) else { continue };
             let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
             let id = manifest["id"].as_str().unwrap_or(&name).to_string();
-            let display_name = manifest["displayName"].as_str().unwrap_or(&id).to_string();
+            let own_name = manifest["displayName"].as_str().unwrap_or(&id).to_string();
+            let key = format!("{source}:{name}");
+            let mine = custom.get(&key);
             pets.push(PetEntry {
-                key: format!("{source}:{name}"),
+                display_name: mine.and_then(|c| c.name.clone()).unwrap_or_else(|| own_name.clone()),
+                hidden: mine.is_some_and(|c| c.hidden),
+                key,
                 id,
-                display_name,
+                own_name,
                 source,
                 ext_file: crate::install::EXT_FILES.iter().copied().find(|f| entry.path().join(f).is_file()),
             });

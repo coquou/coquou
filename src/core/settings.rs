@@ -52,7 +52,8 @@ fn path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 }
 
 pub fn init<R: Runtime>(app: &AppHandle<R>) {
-    let settings = path(app).map(|p| crate::fsutil::read_json_or_default(&p)).unwrap_or_default();
+    let mut settings: Settings = path(app).map(|p| crate::fsutil::read_json_or_default(&p)).unwrap_or_default();
+    settings.prefs.upgrade();
     app.manage(SettingsState(Mutex::new(settings)));
 }
 

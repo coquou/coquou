@@ -182,6 +182,14 @@ select { font: inherit; padding: 5px 8px; border: 1px solid var(--line-2); borde
 .meta dt { color: var(--muted); }
 .meta dd { margin: 0; word-break: break-all; -webkit-user-select: text; user-select: text; }
 .more { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 10px; }
+.name-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; min-height: 30px; }
+.name-row h2 { margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.name-row input { flex: 1; font-size: 15px; font-weight: 600; }
+.lines { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12.5px; }
+.lines summary { cursor: default; color: var(--ink-2); font-weight: 600; }
+.lines label { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; color: var(--muted); }
+.lines textarea { min-height: 0; resize: vertical; font-size: 12.5px; line-height: 1.45; }
+.lines .row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 
 /* ---------- hatch ---------- */
 .hero { display: flex; gap: 26px; align-items: center; padding: 26px; border-radius: 20px; background: linear-gradient(135deg, var(--accent-soft), var(--panel) 70%); border: 1px solid var(--line); box-shadow: var(--shadow); }
@@ -204,12 +212,14 @@ select { font: inherit; padding: 5px 8px; border: 1px solid var(--line-2); borde
 .hatch .h2-tools { margin-left: auto; display: flex; align-items: center; gap: 10px; font-weight: 400; }
 .hatch label { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; color: var(--ink-2); font-weight: 500; }
 .hatch label.check { flex-direction: row; align-items: center; gap: 7px; font-weight: 400; }
-.hatch input[type=text], .hatch input[type=password], .hatch textarea, .hatch select {
+.hatch input[type=text], .hatch input[type=password], .hatch textarea, .hatch select,
+.detail input[type=text], .detail textarea {
   font: inherit; font-size: 13px; color: var(--ink); background: var(--bg); border: 1px solid var(--line-2); border-radius: 8px; padding: 7px 10px; width: 100%; max-width: none;
   -webkit-user-select: text; user-select: text;
 }
 .hatch textarea { min-height: 76px; resize: vertical; }
-.hatch input:focus, .hatch textarea:focus, .hatch select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
+.hatch input:focus, .hatch textarea:focus, .hatch select:focus,
+.detail input:focus, .detail textarea:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent); }
 .hatch input[type=checkbox] { accent-color: var(--accent); }
 .hrow { display: flex; gap: 8px; }
 .hrow select { flex: 1; }

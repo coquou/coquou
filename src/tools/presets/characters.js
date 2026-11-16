@@ -1,4 +1,5 @@
-// The three preset pets, drawn with rig.js:
+// The preset pets, drawn with rig.js:
+//   tuantuan 团团 — orange tabby kitten, the default pet
 //   mianmian 棉棉 — ragdoll kitten
 //   qiqi     栖栖 — anime girl, Coquou's mascot (little bird hair clip)
 //
@@ -378,6 +379,103 @@ const qiqi = {
 };
 qiqi.draw = humanDraw(qiqi);
 
+// ---------- shared kitten ----------
+//
+// Both cats share one body; a config supplies the colours, the tail, the fur
+// markings and the face details.
+
+function kittenDraw(cfg) {
+  const { fur, paw, ear } = cfg;
+  return function draw(g, p) {
+    const yaw = p.yaw, pitch = p.pitch;
+    const H = { x: yaw * 3, y: -94 + pitch * 2, rx: 41, ry: 34 };
+
+    // tail
+    g.save();
+    g.translate(16 - yaw * 6, -18);
+    g.rotate(-0.35 + p.tail * 0.9);
+    cfg.tail(g);
+    g.restore();
+
+    // hind feet
+    for (const side of [-1, 1]) {
+      const f = side < 0 ? p.footL : p.footR;
+      const x = side * 11 + f.dx + yaw * 2.5, y = -5 + f.dy;
+      ellipsePath(g, x, y, 9, 5.6);
+      shade(g, { x, y, rx: 9, ry: 5.6 }, paw, { ao: 0.3, rim: 0.2, sheen: 0.4, lineWidth: 1.1 });
+      g.strokeStyle = rgba(paw.line, 0.6); g.lineWidth = 0.8;
+      for (const t of [-3, 0, 3]) { g.beginPath(); g.moveTo(x + t, y - 3.5); g.lineTo(x + t, y - 1.4); g.stroke(); }
+    }
+
+    // body
+    const B = { x: yaw * 2, y: -32, rx: 27, ry: 28 };
+    fluffPath(g, B.x, B.y, B.rx, B.ry, 18, cfg.fluff, 3);
+    shade(g, B, fur, { ao: 0.4, rim: 0.25, sheen: 0.2, lineWidth: 1.3, texture: (g) => cfg.bodyTexture(g, B, p) });
+    // chest ruff
+    fluffPath(g, B.x + yaw * 3, B.y - 13, 16, 12, 12, cfg.fluff + 0.6, 17);
+    shade(g, { x: B.x, y: B.y - 13, rx: 16, ry: 12 }, paw, { ao: 0.15, rim: 0.1, sheen: 0.3, line: rgba(fur.line, 0.6), lineWidth: 0.9 });
+
+    const front = [];
+    for (const side of [-1, 1]) {
+      const a = side < 0 ? p.armL : p.armR;
+      const draw = () => arm(g, side * 14 + yaw * 2, -46, a, side, 12, null, paw, { w: 12.5, hand: 6.6, toes: true });
+      if (a < -1.5 || a > 1.9) front.push(draw); else draw();
+    }
+
+    // head
+    g.save();
+    g.translate(0, -62); g.rotate(p.headTilt + yaw * 0.03); g.translate(0, 62);
+    // ears
+    for (const side of [-1, 1]) {
+      const ex = H.x + side * 25 - yaw * 3, ey = H.y - 22;
+      g.save();
+      g.translate(ex, ey);
+      g.rotate(side * 0.28 + (p.ear && side > 0 ? 0.25 : 0));
+      g.beginPath();
+      g.moveTo(-11, 6); g.quadraticCurveTo(-5, -14, 0, -19); g.quadraticCurveTo(5, -14, 11, 6);
+      g.closePath();
+      shade(g, { x: 0, y: -4, rx: 11, ry: 13 }, ear, { ao: 0.2, rim: 0.2, sheen: 0.2, lineWidth: 1.2 });
+      g.beginPath(); g.moveTo(-6, 4); g.quadraticCurveTo(-3, -9, 0, -13); g.quadraticCurveTo(3, -9, 6, 4); g.closePath();
+      const ig = g.createLinearGradient(0, -13, 0, 4); ig.addColorStop(0, cfg.innerEar[0]); ig.addColorStop(1, cfg.innerEar[1]);
+      g.fillStyle = ig; g.fill();
+      g.strokeStyle = "rgba(255,255,255,0.85)"; g.lineWidth = 0.7;
+      for (const t of [-3, 0, 3]) { g.beginPath(); g.moveTo(t, 4); g.quadraticCurveTo(t * 0.6, -2, t * 0.3, -6); g.stroke(); }
+      g.restore();
+    }
+    // head fluff
+    fluffPath(g, H.x, H.y, H.rx, H.ry, 22, cfg.fluff + 1, 11, Math.PI * 0.05, Math.PI * 0.95);
+    shade(g, H, fur, {
+      ao: 0.2, rim: 0.2, sheen: 0.15, lineWidth: 1.3, lightShift: yaw * 0.2,
+      texture: (g) => cfg.headTexture(g, H, p, H.x + yaw * 11),
+    });
+    const fx = H.x + yaw * 11, fy = H.y + pitch * 6;
+    for (const side of [-1, 1]) {
+      const ex = fx + side * 16 * (1 - 0.12 * Math.max(0, -side * yaw));
+      if (cfg.iris) eye(g, ex, fy - 3, 8.6, p, side, cfg.iris);
+      else drawEye(g, ex, fy - 1, 7.4, p, side, "bead");
+      brows(g, ex, fy - 16, 6, side, p.brow, cfg.brow);
+    }
+    for (const side of [-1, 1]) blush(g, fx + side * 22, fy + 10, 6, p.blush);
+    // nose
+    g.beginPath();
+    g.moveTo(fx + yaw * 2 - 3.2, fy + 7); g.lineTo(fx + yaw * 2 + 3.2, fy + 7); g.lineTo(fx + yaw * 2, fy + 10.2); g.closePath();
+    g.fillStyle = cfg.nose[0]; g.fill(); g.strokeStyle = cfg.nose[1]; g.lineWidth = 0.8; g.stroke();
+    drawMouth(g, fx + yaw * 2, fy + 11.5, 3.8, p.mouth === "smile" ? "cat" : p.mouth, cfg.mouth);
+    // whiskers
+    g.strokeStyle = cfg.whiskers; g.lineWidth = 0.8; g.lineCap = "round";
+    for (const side of [-1, 1]) for (const k of [-1, 0, 1]) {
+      g.beginPath();
+      g.moveTo(fx + side * 12, fy + 9 + k * 2);
+      g.quadraticCurveTo(fx + side * 26, fy + 6 + k * 3.5, fx + side * 36, fy + 6 + k * 5);
+      g.stroke();
+    }
+    g.restore();
+
+    for (const f of front) f();
+    drawFx(g, p.fx, { x: H.x, y: H.y });
+  };
+}
+
 // ---------- 棉棉 (ragdoll kitten) ----------
 
 const CREAM = { light: "#fffdf8", base: "#f7efe4", dark: "#d8c4ad", line: "#a68b74" };
@@ -396,113 +494,114 @@ const mianmian = {
     held: ["喵呜呜！放下放下！", "本喵要自己走！"],
     idle: ["（舔爪子）", "喵，想晒太阳", "你的键盘看起来很好躺"],
   },
-  draw(g, p) {
-    const yaw = p.yaw, pitch = p.pitch;
-    const H = { x: yaw * 3, y: -94 + pitch * 2, rx: 41, ry: 34 };
-
-    // tail
-    g.save();
-    g.translate(16 - yaw * 6, -18);
-    g.rotate(-0.35 + p.tail * 0.9);
+  fur: CREAM, paw: PAW, ear: SEAL, fluff: 2.4,
+  innerEar: ["#d9a0a0", "#f2c9c4"],
+  iris: ["#d6f2ff", "#4a95e6", "#183e8c"],
+  brow: SEAL.dark,
+  nose: ["#f3a0a8", "#b8616c"],
+  mouth: "#6e4440",
+  whiskers: "rgba(255,255,255,0.95)",
+  tail(g) {
     fluffPath(g, 8, -24, 10, 26, 12, 3.2, 5);
     const tg = g.createLinearGradient(0, 0, 0, -50);
     tg.addColorStop(0, CREAM.dark); tg.addColorStop(0.35, SEAL.base); tg.addColorStop(1, SEAL.dark);
     g.fillStyle = tg; g.fill();
     g.strokeStyle = SEAL.line; g.lineWidth = 1.2; g.stroke();
     g.save(); g.clip(); furStrokes(g, { x: 8, y: -24, rx: 10, ry: 26 }, [rgba(SEAL.light, 0.6), rgba(SEAL.dark, 0.5)], 9, 50, 5, 0.6); g.restore();
-    g.restore();
-
-    // hind feet
-    for (const side of [-1, 1]) {
-      const f = side < 0 ? p.footL : p.footR;
-      const x = side * 11 + f.dx + yaw * 2.5, y = -5 + f.dy;
-      ellipsePath(g, x, y, 9, 5.6);
-      shade(g, { x, y, rx: 9, ry: 5.6 }, PAW, { ao: 0.3, rim: 0.2, sheen: 0.4, lineWidth: 1.1 });
-      g.strokeStyle = rgba(PAW.line, 0.6); g.lineWidth = 0.8;
-      for (const t of [-3, 0, 3]) { g.beginPath(); g.moveTo(x + t, y - 3.5); g.lineTo(x + t, y - 1.4); g.stroke(); }
-    }
-
-    // body
-    const B = { x: yaw * 2, y: -32, rx: 27, ry: 28 };
-    fluffPath(g, B.x, B.y, B.rx, B.ry, 18, 2.4, 3);
-    shade(g, B, CREAM, {
-      ao: 0.4, rim: 0.25, sheen: 0.2, lineWidth: 1.3,
-      texture: (g) => {
-        softSpot(g, B.x + 18, B.y - 6, 14, 22, SEAL.base, 0.25);
-        furStrokes(g, B, [rgba(CREAM.dark, 0.55), "rgba(255,255,255,0.7)"], 13, 110, 5, 0.6);
-      },
-    });
-    // chest ruff
-    fluffPath(g, B.x + yaw * 3, B.y - 13, 16, 12, 12, 3, 17);
-    shade(g, { x: B.x, y: B.y - 13, rx: 16, ry: 12 }, PAW, { ao: 0.15, rim: 0.1, sheen: 0.3, line: rgba(CREAM.line, 0.6), lineWidth: 0.9 });
-
-    const front = [];
-    for (const side of [-1, 1]) {
-      const a = side < 0 ? p.armL : p.armR;
-      const draw = () => arm(g, side * 14 + yaw * 2, -46, a, side, 12, null, PAW, { w: 12.5, hand: 6.6, toes: true });
-      if (a < -1.5 || a > 1.9) front.push(draw); else draw();
-    }
-
-    // head
-    g.save();
-    g.translate(0, -62); g.rotate(p.headTilt + yaw * 0.03); g.translate(0, 62);
-    // ears
-    for (const side of [-1, 1]) {
-      const ex = H.x + side * 25 - yaw * 3, ey = H.y - 22;
-      g.save();
-      g.translate(ex, ey);
-      g.rotate(side * 0.28 + (p.ear && side > 0 ? 0.25 : 0));
-      g.beginPath();
-      g.moveTo(-11, 6); g.quadraticCurveTo(-5, -14, 0, -19); g.quadraticCurveTo(5, -14, 11, 6);
-      g.closePath();
-      shade(g, { x: 0, y: -4, rx: 11, ry: 13 }, SEAL, { ao: 0.2, rim: 0.2, sheen: 0.2, lineWidth: 1.2 });
-      g.beginPath(); g.moveTo(-6, 4); g.quadraticCurveTo(-3, -9, 0, -13); g.quadraticCurveTo(3, -9, 6, 4); g.closePath();
-      const ig = g.createLinearGradient(0, -13, 0, 4); ig.addColorStop(0, "#d9a0a0"); ig.addColorStop(1, "#f2c9c4");
-      g.fillStyle = ig; g.fill();
-      g.strokeStyle = "rgba(255,255,255,0.85)"; g.lineWidth = 0.7;
-      for (const t of [-3, 0, 3]) { g.beginPath(); g.moveTo(t, 4); g.quadraticCurveTo(t * 0.6, -2, t * 0.3, -6); g.stroke(); }
-      g.restore();
-    }
-    // head fluff
-    fluffPath(g, H.x, H.y, H.rx, H.ry, 22, 3.4, 11, Math.PI * 0.05, Math.PI * 0.95);
-    shade(g, H, CREAM, {
-      ao: 0.2, rim: 0.2, sheen: 0.15, lineWidth: 1.3, lightShift: yaw * 0.2,
-      texture: (g) => {
-        const fx = H.x + yaw * 11;
-        // seal-point mask with the white inverted V of a bicolour ragdoll
-        for (const side of [-1, 1]) softSpot(g, fx + side * 20, H.y - 8 + pitch * 4, 16, 16, "#9c7a63", 0.72);
-        softSpot(g, fx, H.y - 28, 22, 9, "#9c7a63", 0.45);
-        softSpot(g, fx, H.y + 10, 13, 24, "#ffffff", 1);
-        softSpot(g, fx, H.y - 8, 5, 12, "#ffffff", 0.85);
-        furStrokes(g, H, [rgba(CREAM.dark, 0.45), "rgba(255,255,255,0.65)"], 19, 120, 4.5, 0.55);
-      },
-    });
-    const fx = H.x + yaw * 11, fy = H.y + pitch * 6;
-    for (const side of [-1, 1]) {
-      const ex = fx + side * 16 * (1 - 0.12 * Math.max(0, -side * yaw));
-      eye(g, ex, fy - 3, 8.6, p, side, ["#d6f2ff", "#4a95e6", "#183e8c"]);
-      brows(g, ex, fy - 16, 6, side, p.brow, SEAL.dark);
-    }
-    for (const side of [-1, 1]) blush(g, fx + side * 22, fy + 10, 6, p.blush);
-    // nose
-    g.beginPath();
-    g.moveTo(fx + yaw * 2 - 3.2, fy + 7); g.lineTo(fx + yaw * 2 + 3.2, fy + 7); g.lineTo(fx + yaw * 2, fy + 10.2); g.closePath();
-    g.fillStyle = "#f3a0a8"; g.fill(); g.strokeStyle = "#b8616c"; g.lineWidth = 0.8; g.stroke();
-    drawMouth(g, fx + yaw * 2, fy + 11.5, 3.8, p.mouth === "smile" ? "cat" : p.mouth, "#6e4440");
-    // whiskers
-    g.strokeStyle = "rgba(255,255,255,0.95)"; g.lineWidth = 0.8; g.lineCap = "round";
-    for (const side of [-1, 1]) for (const k of [-1, 0, 1]) {
-      g.beginPath();
-      g.moveTo(fx + side * 12, fy + 9 + k * 2);
-      g.quadraticCurveTo(fx + side * 26, fy + 6 + k * 3.5, fx + side * 36, fy + 6 + k * 5);
-      g.stroke();
-    }
-    g.restore();
-
-    for (const f of front) f();
-    drawFx(g, p.fx, { x: H.x, y: H.y });
+  },
+  bodyTexture(g, B) {
+    softSpot(g, B.x + 18, B.y - 6, 14, 22, SEAL.base, 0.25);
+    furStrokes(g, B, [rgba(CREAM.dark, 0.55), "rgba(255,255,255,0.7)"], 13, 110, 5, 0.6);
+  },
+  headTexture(g, H, p, fx) {
+    // seal-point mask with the white inverted V of a bicolour ragdoll
+    for (const side of [-1, 1]) softSpot(g, fx + side * 20, H.y - 8 + p.pitch * 4, 16, 16, "#9c7a63", 0.72);
+    softSpot(g, fx, H.y - 28, 22, 9, "#9c7a63", 0.45);
+    softSpot(g, fx, H.y + 10, 13, 24, "#ffffff", 1);
+    softSpot(g, fx, H.y - 8, 5, 12, "#ffffff", 0.85);
+    furStrokes(g, H, [rgba(CREAM.dark, 0.45), "rgba(255,255,255,0.65)"], 19, 120, 4.5, 0.55);
   },
 };
+mianmian.draw = kittenDraw(mianmian);
 
-window.PRESETS = [mianmian, qiqi];
+// ---------- 团团 (orange tabby kitten) ----------
+
+const GINGER = { light: "#ffe9c9", base: "#ffd29a", dark: "#eba664", line: "#8a5530" };
+const STRIPE = "#e8873a";
+const BELLY = { light: "#ffffff", base: "#fff4e3", dark: "#f0d9bb", line: "#8a5530" };
+
+// Tabby stripes clipped to the current path: short arcs across a box.
+function tabby(g, box, n, seed, alpha) {
+  const r = R.rng(seed);
+  g.strokeStyle = rgba(STRIPE, alpha); g.lineCap = "round";
+  for (let i = 0; i < n; i++) {
+    const y = box.y - box.ry * 0.8 + (i + 0.5) * (box.ry * 1.4 / n);
+    const side = i % 2 ? 1 : -1;
+    g.lineWidth = 2.6 + r() * 1.2;
+    g.beginPath();
+    g.moveTo(box.x + side * box.rx * 1.05, y - 3);
+    g.quadraticCurveTo(box.x + side * box.rx * 0.7, y + 1, box.x + side * box.rx * (0.35 + r() * 0.15), y + 4);
+    g.stroke();
+  }
+}
+
+const tuantuan = {
+  id: "tuantuan",
+  displayName: "团团",
+  description: "圆滚滚的小橘猫，额头三道小条纹。",
+  lines: {
+    hello: ["团团在此！", "喵～我来啦"],
+    click: ["喵！", "嗯？", "摸摸可以，戳戳不行喵"],
+    pet: ["呼噜呼噜～", "舒服喵～"],
+    wake: ["喵……再睡五分钟", "唔？"],
+    held: ["喵呜！", "放团团下来！"],
+    idle: ["要不要休息一下？", "团团想吃小鱼干", "（打了个哈欠）"],
+  },
+  fur: GINGER, paw: BELLY, ear: GINGER, fluff: 1.2,
+  innerEar: ["#f4a7a0", "#ffd6cc"],
+  iris: null, // black bead eyes
+  brow: "#a8622e",
+  nose: ["#f79aa5", "#b8616c"],
+  mouth: "#6b3d22",
+  whiskers: "rgba(138,85,48,0.55)",
+  tail(g) {
+    // a long curl out to the side, with tabby rings
+    const path = () => { g.beginPath(); g.moveTo(0, 4); g.bezierCurveTo(26, 4, 34, -18, 22, -40); };
+    g.lineCap = "round";
+    path(); g.strokeStyle = GINGER.line; g.lineWidth = 11.5; g.stroke();
+    path(); g.strokeStyle = "#f6b46e"; g.lineWidth = 8.8; g.stroke();
+    path(); g.strokeStyle = STRIPE; g.lineCap = "butt"; g.setLineDash([3.2, 6.5]); g.lineDashOffset = -8; g.stroke();
+    g.setLineDash([]); g.lineCap = "round";
+    path(); g.strokeStyle = "rgba(255,240,220,0.55)"; g.lineWidth = 2.2; g.translate(-1.6, -1.2); g.stroke();
+  },
+  bodyTexture(g, B) {
+    tabby(g, B, 4, 23, 0.55);
+    softSpot(g, B.x + 4, B.y + 8, 15, 13, "#fff4e3", 0.95); // belly
+    furStrokes(g, B, [rgba(GINGER.dark, 0.35), "rgba(255,255,255,0.55)"], 13, 70, 4, 0.55);
+  },
+  headTexture(g, H, p, fx) {
+    softSpot(g, fx, H.y + 14, 20, 15, "#fff1dc", 0.9); // muzzle
+    // the three forehead stripes
+    g.strokeStyle = STRIPE; g.lineCap = "round"; g.lineWidth = 3.4;
+    for (const d of [-7, 0, 7]) {
+      g.beginPath();
+      g.moveTo(fx + d * 1.1, H.y - H.ry * 0.98 + p.pitch * 2);
+      g.lineTo(fx + d * 0.9, H.y - H.ry * 0.62 + p.pitch * 3);
+      g.stroke();
+    }
+    for (const side of [-1, 1]) { // cheek stripes
+      g.lineWidth = 2.4;
+      for (const k of [0, 1]) {
+        g.beginPath();
+        g.moveTo(H.x + side * H.rx * 1.02, H.y + k * 7 - 2);
+        g.lineTo(H.x + side * H.rx * 0.78, H.y + k * 7);
+        g.stroke();
+      }
+    }
+    furStrokes(g, H, [rgba(GINGER.dark, 0.3), "rgba(255,255,255,0.5)"], 19, 80, 4, 0.5);
+  },
+};
+tuantuan.draw = kittenDraw(tuantuan);
+
+window.PRESETS = [tuantuan, mianmian, qiqi];
 })();

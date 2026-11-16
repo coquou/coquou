@@ -347,13 +347,19 @@ const HATCH = (() => {
     });
   }
 
-  function cellCanvas(p, mirror = false) {
-    const c = new OffscreenCanvas(CELL_W, CELL_H);
+  /**
+   * One placed frame drawn into a cell, `k`× the atlas resolution (frames
+   * keep their full sheet resolution until here, so the 2× HD atlas is drawn
+   * from the source pixels, not upscaled).
+   */
+  function cellCanvas(p, mirror = false, k = 1) {
+    const c = new OffscreenCanvas(CELL_W * k, CELL_H * k);
     if (!p) return c;
     const g = c.getContext("2d");
     const src = new OffscreenCanvas(p.w, p.h);
     src.getContext("2d").putImageData(p.image, 0, 0);
     g.imageSmoothingQuality = "high";
+    g.scale(k, k);
     if (mirror) { g.translate(CELL_W, 0); g.scale(-1, 1); }
     g.drawImage(src, p.dx, p.dy, p.dw, p.dh);
     return c;
@@ -387,7 +393,8 @@ const HATCH = (() => {
    * as in the idle row. Models draw the character smaller in narrower sheet
    * cells (4×2 grids) and in jump sheets, whatever the prompt says, so one
    * shared scale left those rows visibly smaller.
-   * rowsFrames: { stateId: frames[] }. Returns { stateId: OffscreenCanvas[] }.
+   * rowsFrames: { stateId: frames[] }. Returns { stateId: { cells, places } }:
+   * 1× preview cells, and the placements composeAtlas draws at any scale.
    */
   function layoutAll(rowsFrames) {
     const idle = rowsFrames["idle"]?.filter(Boolean) ?? [];
@@ -399,7 +406,8 @@ const HATCH = (() => {
       if (!src) continue;
       const size = rowSize(src);
       const scale = idleScale && size ? idleScale * idleSize / size : null;
-      out[st.id] = placeRow(src, { lift: !st.look && !st.cardinal, scale }).map((p) => cellCanvas(p, !!st.mirrorOf));
+      const places = placeRow(src, { lift: !st.look && !st.cardinal, scale }).map((p) => p && { ...p, mirror: !!st.mirrorOf });
+      out[st.id] = { cells: places.map((p) => cellCanvas(p, p?.mirror)), places };
     }
     return out;
   }
@@ -413,12 +421,15 @@ const HATCH = (() => {
     });
   }
 
-  /** rows: { [rowIndex]: OffscreenCanvas[] } → PNG b64 of the 1536×2288 atlas. */
-  async function composeAtlas(rows) {
-    const atlas = new OffscreenCanvas(CELL_W * COLS, CELL_H * ROWS);
+  /**
+   * rows: { [rowIndex]: places[] } (from layoutAll) → the Codex v2 atlas at
+   * `k`× (1 = 1536×2288; 2 = the HD copy named by coquou.json `hd`).
+   */
+  async function composeAtlas(rows, k = 1) {
+    const atlas = new OffscreenCanvas(CELL_W * COLS * k, CELL_H * ROWS * k);
     const g = atlas.getContext("2d");
-    for (const [row, cells] of Object.entries(rows))
-      cells.forEach((c, col) => c && g.drawImage(c, col * CELL_W, Number(row) * CELL_H));
+    for (const [row, places] of Object.entries(rows))
+      places.forEach((p, col) => p && g.drawImage(cellCanvas(p, p.mirror, k), col * CELL_W * k, Number(row) * CELL_H * k));
     return { canvas: atlas, b64: await canvasToB64(atlas) };
   }
 

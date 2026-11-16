@@ -22,8 +22,17 @@
   const ua = navigator.userAgent;
   const platform = /Mac/.test(ua) ? "macos" : /Windows/.test(ua) ? "windows" : "linux";
   const keystore = platform === "windows" ? "凭据管理器" : "钥匙串";
-  const BUILTIN = { key: "builtin", name: "团团" };
   const MASCOT_KEY = "preset:qiqi";
+
+  // Speech lines for pets without their own (doc/pet-format.md `lines`).
+  const DEFAULT_LINES = {
+    hello: ["来啦～", "新的一天，一起加油！"],
+    click: ["干嘛呀～", "嘿嘿", "被发现了！"],
+    pet: ["好舒服～", "再摸摸嘛", "嘿嘿嘿"],
+    wake: ["唔……谁吵我", "我没睡着！"],
+    held: ["哇！放我下来！", "好高呀"],
+    idle: ["休息一下眼睛吧", "记得喝水哦", "我就在这儿陪你"],
+  };
 
   // ---------- Codex atlas ----------
   // doc/pet-format.md: 8 columns of 192×208 cells; v1 has 9 rows, v2 11
@@ -81,7 +90,7 @@
   }
 
   window.Coquou = {
-    mirrorConsole, platform, keystore, BUILTIN, MASCOT_KEY,
+    mirrorConsole, platform, keystore, MASCOT_KEY, DEFAULT_LINES,
     CELL, COLS, ROWS, LOOK_ROWS, petBytes, petImage, petJson, loadAtlas,
   };
 })();

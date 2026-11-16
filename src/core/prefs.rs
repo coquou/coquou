@@ -1,5 +1,6 @@
-//! Pet preferences: which pet, its size, where it roams, how lively and
-//! chatty it is, and the first-run flags. Saved with the app settings
+//! Pet preferences: which pet, its size, the user's own name / lines /
+//! hidden flag per pet, where it roams, how lively and chatty it is, and the
+//! first-run flags. Saved with the app settings
 //! (settings.rs) so they survive updates; the overlay applies them and the
 //! app window changes them through `prefs_set`.
 //!
@@ -7,6 +8,7 @@
 //! when the remembered pet is missing the overlay falls back to another one
 //! without overwriting the user's choice.
 
+use crate::install::{check_lines, Lines, LINE_KINDS};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -37,6 +39,24 @@ pub enum Activity {
 pub const SIZES: [f64; 5] = [0.75, 1.0, 1.3, 1.6, 2.0];
 /// Longest "doze off after" delay accepted, in seconds (0 = never).
 const MAX_SLEEP_AFTER: u32 = 3600;
+/// Longest pet name the user may give, in characters.
+const MAX_NAME_CHARS: usize = 24;
+
+/// The user's own touches to one pet. Kept here rather than in the pet's
+/// files, so read-only pets (presets, Codex) can be customised too and an
+/// update or reinstall never loses them.
+#[derive(Serialize, Deserialize, Clone, PartialEq, Debug, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct Custom {
+    /// Shown instead of the pet's own displayName.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// Replaces the pet's own lines, occasion by occasion.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lines: Option<Lines>,
+    /// Left out of the tray menu and of automatic pet choices.
+    pub hidden: bool,
+}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "camelCase", default)]
@@ -45,6 +65,8 @@ pub struct Prefs {
     pub pet: Option<String>,
     /// Size multiplier per pet key; missing = 1.
     pub sizes: BTreeMap<String, f64>,
+    /// The user's name / lines / hidden flag per pet key.
+    pub custom: BTreeMap<String, Custom>,
     pub zone: Zone,
     pub activity: Activity,
     /// Seconds without interaction before the pet may doze off; 0 = never.
@@ -62,6 +84,7 @@ impl Default for Prefs {
         Prefs {
             pet: None,
             sizes: BTreeMap::new(),
+            custom: BTreeMap::new(),
             zone: Zone::default(),
             activity: Activity::default(),
             sleep_after: 45,
@@ -79,6 +102,8 @@ pub struct Patch {
     pet: Option<String>,
     /// Size of one pet: `{ "pet": key, "value": multiplier }`.
     size: Option<SizePatch>,
+    /// Customise one pet: `{ "pet": key, "name"?, "lines"?, "hidden"? }`.
+    custom: Option<CustomPatch>,
     zone: Option<Zone>,
     activity: Option<Activity>,
     sleep_after: Option<u32>,
@@ -93,6 +118,56 @@ pub struct SizePatch {
     value: f64,
 }
 
+/// Fields left out stay as they are; an empty name or an empty lines object
+/// goes back to the pet's own.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CustomPatch {
+    pet: String,
+    name: Option<String>,
+    lines: Option<Lines>,
+    hidden: Option<bool>,
+}
+
+impl CustomPatch {
+    fn check(&self) -> Result<(), String> {
+        if let Some(name) = &self.name {
+            if name.trim().chars().count() > MAX_NAME_CHARS || name.chars().any(char::is_control) {
+                return Err(format!("名字最多 {MAX_NAME_CHARS} 个字"));
+            }
+        }
+        if let Some(lines) = &self.lines {
+            if let Some(kind) = lines.keys().find(|k| !LINE_KINDS.contains(&k.as_str())) {
+                return Err(format!("unknown line kind {kind}"));
+            }
+            check_lines(lines)?;
+        }
+        Ok(())
+    }
+
+    fn apply(self, all: &mut BTreeMap<String, Custom>) {
+        let c = all.entry(self.pet.clone()).or_default();
+        if let Some(name) = self.name {
+            let name = name.trim();
+            c.name = (!name.is_empty()).then(|| name.to_string());
+        }
+        if let Some(lines) = self.lines {
+            let lines: Lines = lines
+                .into_iter()
+                .map(|(k, v)| (k, v.into_iter().map(|t| t.trim().to_string()).filter(|t| !t.is_empty()).collect::<Vec<_>>()))
+                .filter(|(_, v)| !v.is_empty())
+                .collect();
+            c.lines = (!lines.is_empty()).then_some(lines);
+        }
+        if let Some(h) = self.hidden {
+            c.hidden = h;
+        }
+        if *c == Custom::default() {
+            all.remove(&self.pet);
+        }
+    }
+}
+
 impl Patch {
     fn apply(self, p: &mut Prefs) -> Result<(), String> {
         if let Some(s) = &self.size {
@@ -103,6 +178,9 @@ impl Patch {
         if self.sleep_after.is_some_and(|s| s > MAX_SLEEP_AFTER) {
             return Err("sleepAfter is too large".into());
         }
+        if let Some(c) = &self.custom {
+            c.check()?;
+        }
         if let Some(pet) = self.pet {
             p.pet = Some(pet);
         }
@@ -112,6 +190,9 @@ impl Patch {
             } else {
                 p.sizes.insert(s.pet, s.value);
             }
+        }
+        if let Some(c) = self.custom {
+            c.apply(&mut p.custom);
         }
         if let Some(z) = self.zone {
             p.zone = z;
@@ -135,10 +216,26 @@ impl Patch {
     }
 }
 
-/// A deleted pet: drop its size and, if it was the chosen one, the choice.
+impl Prefs {
+    /// Settings from before the built-in cat became the preset 团团.
+    pub fn upgrade(&mut self) {
+        const OLD: &str = "builtin";
+        const NEW: &str = "preset:tuantuan";
+        if self.pet.as_deref() == Some(OLD) {
+            self.pet = Some(NEW.into());
+        }
+        if let Some(size) = self.sizes.remove(OLD) {
+            self.sizes.insert(NEW.into(), size);
+        }
+    }
+}
+
+/// A deleted pet: drop its size and customisation and, if it was the chosen
+/// one, the choice.
 pub fn forget_pet<R: Runtime>(app: &AppHandle<R>, key: &str) {
     let result = crate::settings::update(app, |s| {
         s.prefs.sizes.remove(key);
+        s.prefs.custom.remove(key);
         if s.prefs.pet.as_deref() == Some(key) {
             s.prefs.pet = None;
         }
@@ -236,5 +333,33 @@ mod tests {
         assert!(patch(r#"{ "sleepAfter": 99999 }"#).unwrap().apply(&mut p).is_err());
         assert!(patch(r#"{ "zone": "middle" }"#).is_err());
         assert!(patch(r#"{ "bogus": 1 }"#).is_err());
+    }
+
+    #[test]
+    fn custom_name_lines_hidden() {
+        let mut p = Prefs::default();
+        patch(r#"{ "custom": { "pet": "preset:qiqi", "name": "  小栖 ", "lines": { "click": ["嗨", " "] } } }"#)
+            .unwrap()
+            .apply(&mut p)
+            .unwrap();
+        let c = &p.custom["preset:qiqi"];
+        assert_eq!(c.name.as_deref(), Some("小栖"));
+        assert_eq!(c.lines.as_ref().unwrap()["click"], vec!["嗨".to_string()]);
+        // Back to the pet's own: the entry disappears.
+        patch(r#"{ "custom": { "pet": "preset:qiqi", "name": "", "lines": {} } }"#).unwrap().apply(&mut p).unwrap();
+        assert!(p.custom.is_empty());
+        patch(r#"{ "custom": { "pet": "codex:x", "hidden": true } }"#).unwrap().apply(&mut p).unwrap();
+        assert!(p.custom["codex:x"].hidden);
+        let long = "名".repeat(MAX_NAME_CHARS + 1);
+        assert!(patch(&format!(r#"{{ "custom": {{ "pet": "a", "name": "{long}" }} }}"#)).unwrap().apply(&mut p).is_err());
+        assert!(patch(r#"{ "custom": { "pet": "a", "lines": { "dance": ["x"] } } }"#).unwrap().apply(&mut p).is_err());
+    }
+
+    #[test]
+    fn builtin_becomes_preset() {
+        let mut p: Prefs = serde_json::from_str(r#"{ "pet": "builtin", "sizes": { "builtin": 1.3 } }"#).unwrap();
+        p.upgrade();
+        assert_eq!(p.pet.as_deref(), Some("preset:tuantuan"));
+        assert_eq!(p.sizes.get("preset:tuantuan"), Some(&1.3));
     }
 }

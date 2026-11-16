@@ -183,24 +183,29 @@ fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
     None
 }
 
-/// `lines`: { "<occasion>": ["…", …] } — strings only, bounded sizes.
-fn check_lines(lines: &serde_json::Value) -> Result<(), String> {
+/// Speech lines: { "<occasion>": ["…", …] } (doc/pet-format.md).
+pub type Lines = std::collections::BTreeMap<String, Vec<String>>;
+
+/// The occasions the overlay speaks on.
+pub const LINE_KINDS: [&str; 6] = ["hello", "click", "pet", "wake", "held", "idle"];
+
+/// Bounded sizes for lines, from a pet file or the user's own (prefs.rs).
+pub fn check_lines(lines: &Lines) -> Result<(), String> {
     const MAX_PER_KIND: usize = 50;
     const MAX_CHARS: usize = 80;
-    let kinds = lines.as_object().ok_or("coquou.json 的 lines 必须是对象")?;
-    for (kind, list) in kinds {
-        let list = list.as_array().ok_or(format!("lines.{kind} 必须是字符串数组"))?;
+    for (kind, list) in lines {
         if list.len() > MAX_PER_KIND {
             return Err(format!("lines.{kind} 最多 {MAX_PER_KIND} 句"));
         }
-        for line in list {
-            let text = line.as_str().ok_or(format!("lines.{kind} 必须是字符串数组"))?;
-            if text.chars().count() > MAX_CHARS {
-                return Err(format!("lines.{kind} 里有一句超过 {MAX_CHARS} 个字"));
-            }
+        if list.iter().any(|t| t.chars().count() > MAX_CHARS) {
+            return Err(format!("lines.{kind} 里有一句超过 {MAX_CHARS} 个字"));
         }
     }
     Ok(())
+}
+
+fn parse_lines(value: &serde_json::Value) -> Result<Lines, String> {
+    serde_json::from_value(value.clone()).map_err(|_| "coquou.json 的 lines 必须是 { 场合: [字符串…] }".to_string())
 }
 
 /// The extension file: `coquou.json`, or `perchy.json` from before the rename.
@@ -249,7 +254,7 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
             }
         }
         if let Some(lines) = ext.get("lines") {
-            check_lines(lines)?;
+            check_lines(&parse_lines(lines)?)?;
         }
         if let Some(states) = ext["states"].as_object() {
             for (name, state) in states {
@@ -405,16 +410,17 @@ mod tests {
             }
         }
         ids.sort();
-        assert_eq!(ids, ["mianmian", "qiqi"]);
+        assert_eq!(ids, ["mianmian", "qiqi", "tuantuan"]);
     }
 
     #[test]
     fn lines_are_checked() {
         use serde_json::json;
-        assert!(check_lines(&json!({ "click": ["喵", "嗯？"] })).is_ok());
-        assert!(check_lines(&json!(["喵"])).is_err());
-        assert!(check_lines(&json!({ "click": [1] })).is_err());
-        assert!(check_lines(&json!({ "click": ["x".repeat(81)] })).is_err());
+        let check = |v: serde_json::Value| parse_lines(&v).and_then(|l| check_lines(&l));
+        assert!(check(json!({ "click": ["喵", "嗯？"] })).is_ok());
+        assert!(check(json!(["喵"])).is_err());
+        assert!(check(json!({ "click": [1] })).is_err());
+        assert!(check(json!({ "click": ["x".repeat(81)] })).is_err());
     }
 
     #[test]
