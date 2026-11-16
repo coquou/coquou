@@ -195,7 +195,7 @@ async function renderDetail() {
     chipBox.append(b);
   });
   const current = p.key === ui.current;
-  const use = el("button", { className: "btn primary use" + (current ? " current" : ""), textContent: current ? "✓ 正在桌面上" : "让它上桌面", type: "button" });
+  const use = el("button", { className: "btn primary use" + (current ? " current" : ""), textContent: current ? "✓ 正在桌面上" : "让TA上桌面", type: "button" });
   use.onclick = () => { if (!current) usePet(p.key); };
 
   const ext = a?.ext || {};
@@ -347,8 +347,8 @@ $("importFile").onchange = async (e) => {
 function renderWelcome() {
   $("welcome").hidden = ui.welcomeDismissed;
   $("welcomeText").textContent = platform === "macos"
-    ? "宠物会在屏幕底部的角落里溜达。Coquou 住在屏幕右上角的菜单栏里，点那里的图标或者右键点宠物，可以叫它回来、哄它睡觉，或者再打开这个窗口。"
-    : "宠物会在屏幕底部的角落里溜达。Coquou 住在屏幕右下角的通知区域（可能在「^」里），单击图标打开这个窗口，右键图标或者右键点宠物，可以叫它回来、哄它睡觉。";
+    ? "宠物会在屏幕底部的角落里溜达。Coquou 住在屏幕右上角的菜单栏里，点那里的图标或者右键点宠物，可以叫TA回来、哄TA睡觉，或者再打开这个窗口。"
+    : "宠物会在屏幕底部的角落里溜达。Coquou 住在屏幕右下角的通知区域（可能在「^」里），单击图标打开这个窗口，右键图标或者右键点宠物，可以叫TA回来、哄TA睡觉。";
 }
 $("welcomeOk").onclick = () => setPrefs({ welcomeDismissed: true });
 $("dropHint").textContent = "把 .pet / .zip 宠物包拖进这个窗口，或拖到桌面上的宠物身上，都能安装。";

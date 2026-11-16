@@ -446,7 +446,7 @@ async function install() {
       hdPng: st.hdB64,
       coquouJson: JSON.stringify({ format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model } }, null, 2),
     });
-    setStatus(el, `${done.replaced ? "已更新" : "已安装"}「${done.displayName}」，桌宠已经换成它了。`, "ok");
+    setStatus(el, `${done.replaced ? "已更新" : "已安装"}「${done.displayName}」，桌宠已经换成TA了。`, "ok");
     window.coquouHatchPending?.(false);
     if (persist) invoke("hatch_clear").catch(() => {});
     console.info("installed", done.key);
