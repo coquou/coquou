@@ -22,8 +22,10 @@ just builds and uploads its installer; the Mac signs it and publishes.
 `upload` and `publish` use the GitHub CLI; run them with a token that can
 write to the repo, e.g. GH_TOKEN=$(gh auth token -u <owner>).
 
-Optional: COQUOU_SIGN_IDENTITY="<codesign identity>" signs the macOS app
-with that certificate (keeps keychain access across updates).
+The macOS app is signed with the "Coquou Self-Signed" certificate from the
+login keychain (doc/releasing.md), so every release keeps keychain access
+across updates. COQUOU_SIGN_IDENTITY names a different certificate; without
+one, `build` stops unless given --unsigned.
 """
 import argparse
 import datetime
@@ -44,6 +46,14 @@ REPO = "coquou/coquou"
 NPX = "npx.cmd" if os.name == "nt" else "npx"
 CLI = [NPX, "-y", "@tauri-apps/cli@2"]
 KEY = Path(os.environ.get("COQUOU_UPDATER_KEY", Path.home() / ".tauri" / "coquou-updater.key"))
+SIGN_IDENTITY = os.environ.get("COQUOU_SIGN_IDENTITY", "Coquou Self-Signed")
+
+
+def has_identity(name):
+    """Whether the keychain has a code-signing identity called `name`."""
+    found = subprocess.run(["security", "find-identity", "-p", "codesigning"],
+                           capture_output=True, text=True, check=True).stdout
+    return f'"{name}"' in found
 
 
 def run(cmd, **kw):
@@ -96,8 +106,15 @@ def cmd_build(a):
             sys.exit(f"updater key not found: {KEY}")
         env["TAURI_SIGNING_PRIVATE_KEY"] = KEY.read_text().strip()
         env.setdefault("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", "")
-        if os.environ.get("COQUOU_SIGN_IDENTITY"):
-            env["APPLE_SIGNING_IDENTITY"] = os.environ["COQUOU_SIGN_IDENTITY"]
+        if has_identity(SIGN_IDENTITY):
+            env["APPLE_SIGNING_IDENTITY"] = SIGN_IDENTITY
+        elif a.unsigned:
+            print("warning: building unsigned; users will be asked for keychain access again after this update")
+        else:
+            # A release signed differently from the last one costs every user
+            # a keychain prompt, so don't let a missing certificate slip by.
+            sys.exit(f'code-signing certificate "{SIGN_IDENTITY}" is not in the keychain '
+                     f'(doc/releasing.md); import it, or pass --unsigned')
         target = "universal-apple-darwin" if a.universal else None
         cmd = CLI + ["build", "--bundles", "app,dmg", "--config", json.dumps({"bundle": {"createUpdaterArtifacts": True}})]
         if target:
@@ -208,7 +225,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("bump"); b.add_argument("version"); b.set_defaults(fn=cmd_bump)
-    b = sub.add_parser("build"); b.add_argument("--universal", action="store_true", help="macOS: Intel + Apple Silicon"); b.set_defaults(fn=cmd_build)
+    b = sub.add_parser("build"); b.add_argument("--universal", action="store_true", help="macOS: Intel + Apple Silicon")
+    b.add_argument("--unsigned", action="store_true", help="macOS: build without the code-signing certificate"); b.set_defaults(fn=cmd_build)
     b = sub.add_parser("upload"); b.add_argument("--notes"); b.add_argument("--notes-file"); b.set_defaults(fn=cmd_upload)
     b = sub.add_parser("publish"); b.add_argument("--force", action="store_true", help="publish even if a platform is missing"); b.set_defaults(fn=cmd_publish)
     a = ap.parse_args()

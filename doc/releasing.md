@@ -61,15 +61,11 @@ AI 接口的 key 存在钥匙串里。没有固定签名身份时，每次更新
 
 1. 打开「钥匙串访问」→ 菜单「钥匙串访问」→「证书助理」→「创建证书…」。
 2. 名称填 `Coquou Self-Signed`，身份类型「自签名根证书」，证书类型选「**代码签名**」，创建。
-3. 发版前设置环境变量，`release.py build` 会用它给应用签名：
-
-   ```bash
-   export COQUOU_SIGN_IDENTITY="Coquou Self-Signed"
-   ```
+3. `release.py build` 会自动用钥匙串里的 `Coquou Self-Signed` 给应用签名；第一次签名时 macOS 会问 `codesign` 能否使用这个私钥，选「始终允许」。钥匙串里找不到这张证书时 `build` 会停下，以免发出签名不一样的版本（那样所有用户更新后都要再授权一次）；确实要发未签名版本时加 `--unsigned`。用别的证书时设 `COQUOU_SIGN_IDENTITY="<证书名>"`。
 
 4. 备份：在「钥匙串访问」的「我的证书」里找到 `Coquou Self-Signed`，展开确认下面带着私钥，右键 →「导出」，存成 `.p12` 并设一个密码，和更新签名私钥放在一起保管。只导出证书（`.cer`）没有用，签名需要私钥。
 
-**换发版用的 Mac**：把 `~/.tauri/coquou-updater.key` 拷过去，在新 Mac 上双击 `.p12` 导入到「登录」钥匙串，再设好 `COQUOU_SIGN_IDENTITY`。不要在新机器上重新创建同名证书：名字一样，身份却是新的，等于换了证书。
+**换发版用的 Mac**：把 `~/.tauri/coquou-updater.key` 拷过去，在新 Mac 上双击 `.p12` 导入到「登录」钥匙串，`release.py` 就会自动用它。不要在新机器上重新创建同名证书：名字一样，身份却是新的，等于换了证书。
 
 用户换 Mac 不受影响：证书不用装到用户电脑上。用户在新电脑上装好 Coquou、重新填一次 key（或用迁移助理连钥匙串一起搬过去）就行。
 
