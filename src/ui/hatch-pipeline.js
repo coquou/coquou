@@ -289,43 +289,60 @@ const HATCH = (() => {
       const fw = box.maxX - box.minX + 1, fh = box.maxY - box.minY + 1;
       const ids = new Set(parts.map((c) => c.id));
       const out = new ImageData(fw, fh);
+      let area = 0;
       for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
         const sx = box.minX + x, sy = box.minY + y, p = sy * w + sx;
         const lab = labels[p];
         // Keep soft edge pixels next to the frame's own components too.
         if (lab === -1 ? data[p * 4 + 3] === 0 : !ids.has(lab)) continue;
         out.data.set(data.subarray(p * 4, p * 4 + 4), (y * fw + x) * 4);
+        if (data[p * 4 + 3] >= 128) area++;
       }
-      frames.push({ image: out, w: fw, h: fh, ch, bottom: box.maxY - cy0, centerX: (box.minX + box.maxX) / 2 - cx0 });
+      frames.push({ image: out, w: fw, h: fh, ch, sheetRow: Math.floor(i / cols), area, bottom: box.maxY - cy0, centerX: (box.minX + box.maxX) / 2 - cx0 });
     }
     return { frames, warnings };
   }
 
+  const median = (xs) => { const v = xs.slice().sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null; };
+
   /** Median frame height as a fraction of its sheet cell's height. */
   function bodyFraction(frames) {
-    const fr = frames.filter(Boolean).map((f) => f.h / f.ch).sort((a, b) => a - b);
-    return fr.length ? fr[fr.length >> 1] : null;
+    return median(frames.filter(Boolean).map((f) => f.h / f.ch));
+  }
+
+  /**
+   * Character size of a row in sheet pixels: √(median opaque area). Unlike
+   * height or width this barely changes with pose or facing (a side-on run
+   * and a front-on stand cover about the same area), so it compares rows.
+   */
+  function rowSize(frames) {
+    const a = median(frames.filter(Boolean).map((f) => f.area));
+    return a ? Math.sqrt(a) : null;
   }
 
   /**
    * Scale a row into 192×208 cells and put every frame on one ground line.
-   * `unit` (px per cell-height) makes all rows share one scale: every sheet
-   * cell is drawn at the same height (512 px), so the idle row's body size
-   * sizes the whole pet. Without it the row sizes itself (previews).
+   * `scale` (cell px per sheet px) comes from layoutAll so every row shows
+   * the character at the same size; without it the row sizes itself from
+   * its body height (previews).
    */
-  function placeRow(frames, { lift = true, unit = null } = {}) {
+  function placeRow(frames, { lift = true, scale = null } = {}) {
     const real = frames.filter(Boolean);
     if (!real.length) return [];
-    const ground = Math.max(...real.map((f) => f.bottom));
+    // Each row of the sheet has its own ground line (the prompt asks for one
+    // ground line per row, and models place the rows independently), so a
+    // frame's lift is measured against the lowest feet in its own sheet row.
+    const ground = new Map();
+    for (const f of real) ground.set(f.sheetRow, Math.max(ground.get(f.sheetRow) ?? 0, f.bottom));
     // Body size decides the scale; a jump that would leave the cell keeps the
     // body size and only gets its height compressed.
-    let s = unit ? unit / real[0].ch : TARGET_H / (bodyFraction(frames) * real[0].ch);
+    let s = scale ?? TARGET_H / (bodyFraction(frames) * real[0].ch);
     for (const f of real) s = Math.min(s, (CELL_W - 6) / f.w, (CELL_H - FOOT_PAD - 4) / f.h);
     return frames.map((f) => {
       if (!f) return null;
       const dw = f.w * s, dh = f.h * s;
       const room = Math.max(0, CELL_H - FOOT_PAD - 4 - dh);
-      const up = lift ? Math.min((ground - f.bottom) * s, room) : 0;
+      const up = lift ? Math.min((ground.get(f.sheetRow) - f.bottom) * s, room) : 0;
       return { image: f.image, w: f.w, h: f.h, dx: CELL_W / 2 - dw / 2, dy: CELL_H - FOOT_PAD - up - dh, dw, dh };
     });
   }
@@ -365,17 +382,24 @@ const HATCH = (() => {
   }
 
   /**
-   * Final layout of every row with one shared scale taken from the idle row.
+   * Final layout of every row. The idle row's body height sets the pet's
+   * size; every other row is scaled so its character covers the same area
+   * as in the idle row. Models draw the character smaller in narrower sheet
+   * cells (4×2 grids) and in jump sheets, whatever the prompt says, so one
+   * shared scale left those rows visibly smaller.
    * rowsFrames: { stateId: frames[] }. Returns { stateId: OffscreenCanvas[] }.
    */
   function layoutAll(rowsFrames) {
-    const idle = rowsFrames["idle"] && bodyFraction(rowsFrames["idle"]);
-    const unit = idle ? TARGET_H / idle : null;
+    const idle = rowsFrames["idle"]?.filter(Boolean) ?? [];
+    const idleScale = idle.length ? TARGET_H / (bodyFraction(idle) * idle[0].ch) : null;
+    const idleSize = idle.length ? rowSize(idle) : null;
     const out = {};
     for (const st of STATES) {
       const src = st.mirrorOf ? rowsFrames[st.mirrorOf] : rowsFrames[st.id];
       if (!src) continue;
-      out[st.id] = placeRow(src, { lift: !st.look && !st.cardinal, unit }).map((p) => cellCanvas(p, !!st.mirrorOf));
+      const size = rowSize(src);
+      const scale = idleScale && size ? idleScale * idleSize / size : null;
+      out[st.id] = placeRow(src, { lift: !st.look && !st.cardinal, scale }).map((p) => cellCanvas(p, !!st.mirrorOf));
     }
     return out;
   }
