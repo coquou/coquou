@@ -23,7 +23,7 @@ fn open_app_with<R: Runtime>(app: &AppHandle<R>, page: Option<&str>, init: Optio
     }
     // While it is open, show Coquou in the Dock / app switcher like a normal app.
     #[cfg(target_os = "macos")]
-    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    show_in_dock(app);
     let mut b = WebviewWindowBuilder::new(app, APP, WebviewUrl::App("app.html".into()))
         .title("Coquou")
         .inner_size(1000.0, 680.0)
@@ -45,6 +45,32 @@ fn open_app_with<R: Runtime>(app: &AppHandle<R>, page: Option<&str>, init: Optio
             let _ = w.set_focus();
         }
         Err(e) => log::warn!("cannot open the app window: {e}"),
+    }
+}
+
+/// Make Coquou a regular app with a Dock tile (macOS).
+///
+/// An unbundled build (`cargo run`) has no Info.plist icon, so Tauri sets
+/// the application icon image at start-up instead. The app starts as an
+/// Accessory app, and the Dock tile created when it later turns Regular
+/// shows the generic executable icon unless the image is set again. The
+/// bundled app gets its icon from the bundle, so this is a no-op there.
+#[cfg(target_os = "macos")]
+fn show_in_dock<R: Runtime>(app: &AppHandle<R>) {
+    let _ = app.set_activation_policy(tauri::ActivationPolicy::Regular);
+    // Queued after the policy change, which is also handled on the main thread.
+    let queued = app.run_on_main_thread(|| {
+        let Some(mtm) = objc2::MainThreadMarker::new() else {
+            log::warn!("Dock icon refresh ran off the main thread");
+            return;
+        };
+        let ns_app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+        let icon = ns_app.applicationIconImage();
+        // SAFETY: called on the main thread with an image AppKit itself returned.
+        unsafe { ns_app.setApplicationIconImage(icon.as_deref()) };
+    });
+    if let Err(e) = queued {
+        log::warn!("cannot refresh the Dock icon: {e}");
     }
 }
 
