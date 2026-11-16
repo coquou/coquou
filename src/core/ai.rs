@@ -102,8 +102,14 @@ fn transport_allowed(url: &str) -> bool {
     matches!(host, "localhost" | "127.0.0.1" | "[::1]")
 }
 
+/// What the system key store is called in messages.
+#[cfg(target_os = "macos")]
+const KEYSTORE: &str = "钥匙串";
+#[cfg(not(target_os = "macos"))]
+const KEYSTORE: &str = "凭据管理器";
+
 fn entry(id: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, id).map_err(|e| format!("钥匙串不可用：{e}"))
+    keyring::Entry::new(KEYCHAIN_SERVICE, id).map_err(|e| format!("{KEYSTORE}不可用：{e}"))
 }
 
 /// Keys read from the keychain are cached for the life of the process, so
@@ -113,27 +119,50 @@ fn key_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, St
     CACHE.get_or_init(Default::default)
 }
 
-fn get_key(id: &str) -> Option<String> {
+/// The key of profile `id`. A key store that can't be read is reported as
+/// such, not as a missing key, so the user isn't asked to type it again
+/// when the real problem is a denied access prompt.
+fn get_key(id: &str) -> Result<String, String> {
     if let Some(k) = key_cache().lock().unwrap().get(id) {
-        return Some(k.clone());
+        return Ok(k.clone());
     }
-    let key = match entry(id).ok()?.get_password().ok().filter(|k| !k.is_empty()) {
-        Some(k) => k,
-        None => {
-            // Saved under an old name: copy it over.
-            let (old, k) = OLD_KEYCHAIN_SERVICES.iter().find_map(|s| {
-                let e = keyring::Entry::new(s, id).ok()?;
-                let k = e.get_password().ok().filter(|k| !k.is_empty())?;
-                Some((e, k))
-            })?;
-            if entry(id).and_then(|e| e.set_password(&k).map_err(|e| e.to_string())).is_ok() {
-                let _ = old.delete_credential();
-            }
-            k
-        }
+    let key = match entry(id)?.get_password() {
+        Ok(k) if !k.is_empty() => k,
+        Ok(_) | Err(keyring::Error::NoEntry) => migrate_old_key(id)?.ok_or("这个配置还没有填 API key")?,
+        Err(e) => return Err(format!("读不了{KEYSTORE}里的 API key：{e}")),
     };
     key_cache().lock().unwrap().insert(id.to_string(), key.clone());
-    Some(key)
+    Ok(key)
+}
+
+/// A key saved under an old service name: copy it to the current one and
+/// drop the old copies. `None` when there is none.
+fn migrate_old_key(id: &str) -> Result<Option<String>, String> {
+    for service in OLD_KEYCHAIN_SERVICES {
+        let Ok(old) = keyring::Entry::new(service, id) else { continue };
+        match old.get_password() {
+            Ok(k) if !k.is_empty() => {
+                entry(id)?.set_password(&k).map_err(|e| format!("保存 API key 失败：{e}"))?;
+                forget_old_keys(id);
+                log::info!("ai: moved the API key of profile {id} from {service}");
+                return Ok(Some(k));
+            }
+            Ok(_) | Err(keyring::Error::NoEntry) => {}
+            Err(e) => return Err(format!("读不了{KEYSTORE}里旧的 API key（{e}），可以在配置里重新填一次 key")),
+        }
+    }
+    Ok(None)
+}
+
+/// Delete copies of profile `id`'s key under the old service names.
+fn forget_old_keys(id: &str) {
+    for service in OLD_KEYCHAIN_SERVICES {
+        let Ok(old) = keyring::Entry::new(service, id) else { continue };
+        match old.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => {}
+            Err(e) => log::warn!("ai: cannot delete the old key under {service}: {e}"),
+        }
+    }
 }
 
 fn view(p: Profile) -> ProfileView {
@@ -172,6 +201,7 @@ pub fn ai_save_profile(app: AppHandle, mut profile: Profile, api_key: Option<Str
     }
     if let Some(key) = api_key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
         entry(&profile.id)?.set_password(&key).map_err(|e| format!("保存 API key 失败：{e}"))?;
+        forget_old_keys(&profile.id);
         key_cache().lock().unwrap().insert(profile.id.clone(), key);
         profile.key_saved = Some(true);
     }
@@ -197,11 +227,7 @@ pub fn ai_delete_profile(app: AppHandle, id: String) -> Result<(), String> {
     if let Ok(e) = entry(&id) {
         let _ = e.delete_credential();
     }
-    for s in OLD_KEYCHAIN_SERVICES {
-        if let Ok(e) = keyring::Entry::new(s, &id) {
-            let _ = e.delete_credential();
-        }
-    }
+    forget_old_keys(&id);
     key_cache().lock().unwrap().remove(&id);
     Ok(())
 }
@@ -416,7 +442,7 @@ pub async fn ai_generate(
     size: String,
 ) -> Result<String, String> {
     let profile = load(&app).into_iter().find(|p| p.id == profile_id).ok_or("找不到这个 AI 配置")?;
-    let key = get_key(&profile.id).ok_or("这个配置还没有填 API key")?;
+    let key = get_key(&profile.id)?;
     let started = std::time::Instant::now();
     let fell_back = AtomicBool::new(false);
     let call = |p: Profile| {
