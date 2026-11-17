@@ -3,6 +3,7 @@
 //! (prefs.rs). `update` saves; callers tell the windows what changed
 //! (`settings-changed` here, `prefs` in prefs.rs).
 
+use crate::sync::lock;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -58,7 +59,7 @@ pub fn init<R: Runtime>(app: &AppHandle<R>) {
 }
 
 pub fn get<R: Runtime>(app: &AppHandle<R>) -> Settings {
-    app.try_state::<SettingsState>().map(|s| s.0.lock().unwrap_or_else(|p| p.into_inner()).clone()).unwrap_or_default()
+    app.try_state::<SettingsState>().map(|s| lock(&s.0).clone()).unwrap_or_default()
 }
 
 /// Change and save (atomically, under the settings lock so concurrent
@@ -66,7 +67,7 @@ pub fn get<R: Runtime>(app: &AppHandle<R>) -> Settings {
 /// value still applies for this session.
 pub fn update<R: Runtime>(app: &AppHandle<R>, change: impl FnOnce(&mut Settings)) -> Result<(), String> {
     let state = app.try_state::<SettingsState>().ok_or("settings not initialised")?;
-    let mut s = state.0.lock().unwrap_or_else(|p| p.into_inner());
+    let mut s = lock(&state.0);
     change(&mut s);
     let p = path(app).ok_or("找不到配置目录")?;
     let json = serde_json::to_string_pretty(&*s).map_err(|e| e.to_string())?;

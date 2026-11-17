@@ -9,6 +9,7 @@
 //! without overwriting the user's choice.
 
 use crate::install::{check_lines, Lines, LINE_KINDS};
+use crate::sync::lock;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -257,7 +258,7 @@ pub fn forget_pet<R: Runtime>(app: &AppHandle<R>, key: &str) {
 pub struct Current(Mutex<String>);
 
 fn current<R: Runtime>(app: &AppHandle<R>) -> String {
-    app.try_state::<Current>().map(|c| c.0.lock().unwrap().clone()).unwrap_or_default()
+    app.try_state::<Current>().map(|c| lock(&c.0).clone()).unwrap_or_default()
 }
 
 /// What windows see: the saved prefs plus the pet on screen and its size.
@@ -299,7 +300,7 @@ pub fn prefs_set(app: AppHandle, patch: Patch) -> Result<View, String> {
 #[tauri::command]
 pub fn report_current_pet(app: AppHandle, state: State<Current>, key: String) {
     let changed = {
-        let mut cur = state.0.lock().unwrap();
+        let mut cur = lock(&state.0);
         let changed = *cur != key;
         *cur = key;
         changed

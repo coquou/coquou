@@ -11,7 +11,7 @@
 //!   ai / hatch_run   AI image generation and the saved hatch run
 //!   screens / system  displays; fullscreen + battery detection per OS
 //!   update    self-update;  migrate  data from the app's former names
-//!   fsutil    atomic writes and safe JSON reads
+//!   fsutil    atomic writes and safe JSON reads;  sync  locking shared state
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod ai;
@@ -25,6 +25,7 @@ mod pets;
 mod prefs;
 mod screens;
 mod settings;
+mod sync;
 mod system;
 mod tray;
 mod update;

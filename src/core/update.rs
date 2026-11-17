@@ -12,6 +12,7 @@
 //! Dev: `COQUOU_UPDATE_URL=http://127.0.0.1:8765/latest.json` points the
 //! updater at a local server (plain http only works in debug builds).
 
+use crate::sync::lock;
 use serde::Serialize;
 use std::sync::Mutex;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -50,20 +51,20 @@ fn now() -> u64 {
 
 pub fn status<R: Runtime>(app: &AppHandle<R>) -> Status {
     let state = app.state::<UpdateState>();
-    let mut s = state.status.lock().unwrap().clone();
+    let mut s = lock(&state.status).clone();
     s.current = app.package_info().version.to_string();
     s
 }
 
 /// Version string of an update waiting to be installed, for the tray.
 pub fn available_version<R: Runtime>(app: &AppHandle<R>) -> Option<String> {
-    app.try_state::<UpdateState>()?.status.lock().unwrap().available.as_ref().map(|a| a.version.clone())
+    lock(&app.try_state::<UpdateState>()?.status).available.as_ref().map(|a| a.version.clone())
 }
 
 fn set<R: Runtime>(app: &AppHandle<R>, change: impl FnOnce(&mut Status)) {
     {
         let state = app.state::<UpdateState>();
-        let mut s = state.status.lock().unwrap();
+        let mut s = lock(&state.status);
         change(&mut s);
     }
     let _ = app.emit_to(crate::windows::APP, "update-status", status(app));
@@ -106,7 +107,7 @@ pub async fn check<R: Runtime>(app: &AppHandle<R>) -> Result<Status, String> {
     // on 「检查更新」 must not both run.
     let busy = {
         let state = app.state::<UpdateState>();
-        let mut s = state.status.lock().unwrap_or_else(|p| p.into_inner());
+        let mut s = lock(&state.status);
         let busy = s.checking || s.installing;
         if !busy {
             s.checking = true;
@@ -127,7 +128,7 @@ pub async fn check<R: Runtime>(app: &AppHandle<R>) -> Result<Status, String> {
                 date: update.date.map(|d| d.date().to_string()),
             };
             log::info!("update available: {} → {}", update.current_version, update.version);
-            *app.state::<UpdateState>().pending.lock().unwrap() = Some(update.clone());
+            *lock(&app.state::<UpdateState>().pending) = Some(update.clone());
             set(app, |s| {
                 s.available = Some(info.clone());
                 s.last_error = None;
@@ -139,7 +140,7 @@ pub async fn check<R: Runtime>(app: &AppHandle<R>) -> Result<Status, String> {
         }
         Ok(None) => {
             log::info!("up to date ({})", app.package_info().version);
-            *app.state::<UpdateState>().pending.lock().unwrap() = None;
+            *lock(&app.state::<UpdateState>().pending) = None;
             set(app, |s| {
                 s.available = None;
                 s.last_error = None;
@@ -195,7 +196,7 @@ pub async fn update_check(app: AppHandle) -> Result<Status, String> {
 /// `{ downloaded, total }` while downloading.
 #[tauri::command]
 pub async fn update_install(app: AppHandle) -> Result<(), String> {
-    let update = app.state::<UpdateState>().pending.lock().unwrap().clone();
+    let update = lock(&app.state::<UpdateState>().pending).clone();
     let Some(update) = update else { return Err("没有可安装的更新，请先检查更新".into()) };
     set(&app, |s| {
         s.installing = true;

@@ -8,6 +8,7 @@ use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use crate::install::{self, Installed};
+use crate::sync::lock;
 
 /// The pet to show first: one installed (or named with `--pet`) before the
 /// overlay page was listening. The overlay claims it with `overlay_ready`;
@@ -21,7 +22,7 @@ pub struct Startup {
 pub fn set_pending<R: Runtime>(app: &AppHandle<R>, key: String) {
     let startup = app.state::<Startup>();
     if !startup.ready.load(Ordering::SeqCst) {
-        *startup.pending.lock().unwrap_or_else(|p| p.into_inner()) = Some(key);
+        *lock(&startup.pending) = Some(key);
     }
 }
 
@@ -29,7 +30,7 @@ pub fn set_pending<R: Runtime>(app: &AppHandle<R>, key: String) {
 #[tauri::command]
 pub fn overlay_ready(startup: State<Startup>) -> Option<String> {
     startup.ready.store(true, Ordering::SeqCst);
-    startup.pending.lock().unwrap_or_else(|p| p.into_inner()).take()
+    lock(&startup.pending).take()
 }
 
 /// A fresh path in the app cache for temporary install input.
@@ -136,12 +137,12 @@ pub fn install_bytes(app: AppHandle, request: tauri::ipc::Request<'_>) -> Result
 pub struct Dropped(Mutex<Vec<PathBuf>>);
 
 pub fn set_dropped<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
-    *app.state::<Dropped>().0.lock().unwrap() = paths;
+    *lock(&app.state::<Dropped>().0) = paths;
 }
 
 #[tauri::command(async)]
 pub fn install_dropped(app: AppHandle, dropped: State<Dropped>) {
-    let paths = std::mem::take(&mut *dropped.0.lock().unwrap());
+    let paths = std::mem::take(&mut *lock(&dropped.0));
     install_paths(&app, paths);
 }
 
@@ -150,7 +151,7 @@ const MAX_DROPPED_IMAGE: u64 = 40 * 1024 * 1024;
 
 #[tauri::command(async)]
 pub fn read_dropped(dropped: State<Dropped>, path: String) -> Result<tauri::ipc::Response, String> {
-    let file = dropped.0.lock().unwrap().iter().find(|p| p.display().to_string() == path).cloned().ok_or("不是刚拖进来的文件")?;
+    let file = lock(&dropped.0).iter().find(|p| p.display().to_string() == path).cloned().ok_or("不是刚拖进来的文件")?;
     let meta = std::fs::metadata(&file).map_err(|e| e.to_string())?;
     if !meta.is_file() || meta.len() > MAX_DROPPED_IMAGE {
         return Err("图片太大或不是文件".into());

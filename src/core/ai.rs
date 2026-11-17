@@ -16,9 +16,11 @@
 //! only sent over https, or plain http to this machine (the offline
 //! self-test). Profiles are read-modified-written under one lock.
 
+use crate::sync::lock;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -82,7 +84,7 @@ fn load<R: Runtime>(app: &AppHandle<R>) -> Vec<Profile> {
 
 /// Load the profiles, apply `change`, save them — all under `PROFILES_LOCK`.
 fn modify<R: Runtime, T>(app: &AppHandle<R>, change: impl FnOnce(&mut Vec<Profile>) -> Result<T, String>) -> Result<T, String> {
-    let _guard = PROFILES_LOCK.lock().unwrap_or_else(|p| p.into_inner());
+    let _guard = lock(&PROFILES_LOCK);
     let mut profiles = load(app);
     let out = change(&mut profiles)?;
     let path = profiles_path(app)?;
@@ -114,8 +116,8 @@ fn entry(id: &str) -> Result<keyring::Entry, String> {
 
 /// Keys read from the keychain are cached for the life of the process, so
 /// macOS asks for keychain access at most once per profile per launch.
-fn key_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
-    static CACHE: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> = std::sync::OnceLock::new();
+fn key_cache() -> &'static Mutex<HashMap<String, String>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
     CACHE.get_or_init(Default::default)
 }
 
@@ -123,7 +125,7 @@ fn key_cache() -> &'static std::sync::Mutex<std::collections::HashMap<String, St
 /// such, not as a missing key, so the user isn't asked to type it again
 /// when the real problem is a denied access prompt.
 fn get_key(id: &str) -> Result<String, String> {
-    if let Some(k) = key_cache().lock().unwrap().get(id) {
+    if let Some(k) = lock(key_cache()).get(id) {
         return Ok(k.clone());
     }
     let key = match entry(id)?.get_password() {
@@ -131,7 +133,7 @@ fn get_key(id: &str) -> Result<String, String> {
         Ok(_) | Err(keyring::Error::NoEntry) => migrate_old_key(id)?.ok_or("这个配置还没有填 API key")?,
         Err(e) => return Err(format!("读不了{KEYSTORE}里的 API key：{e}")),
     };
-    key_cache().lock().unwrap().insert(id.to_string(), key.clone());
+    lock(key_cache()).insert(id.to_string(), key.clone());
     Ok(key)
 }
 
@@ -168,7 +170,7 @@ fn forget_old_keys(id: &str) {
 fn view(p: Profile) -> ProfileView {
     // Profiles saved before `key_saved` existed: true is the likely answer
     // and the first real use reads (and caches) the key anyway.
-    let has_key = p.key_saved.unwrap_or(true) || key_cache().lock().unwrap().contains_key(&p.id);
+    let has_key = p.key_saved.unwrap_or(true) || lock(key_cache()).contains_key(&p.id);
     ProfileView { profile: p, has_key }
 }
 
@@ -202,7 +204,7 @@ pub fn ai_save_profile(app: AppHandle, mut profile: Profile, api_key: Option<Str
     if let Some(key) = api_key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
         entry(&profile.id)?.set_password(&key).map_err(|e| format!("保存 API key 失败：{e}"))?;
         forget_old_keys(&profile.id);
-        key_cache().lock().unwrap().insert(profile.id.clone(), key);
+        lock(key_cache()).insert(profile.id.clone(), key);
         profile.key_saved = Some(true);
     }
     let saved = modify(&app, |profiles| {
@@ -228,7 +230,7 @@ pub fn ai_delete_profile(app: AppHandle, id: String) -> Result<(), String> {
         let _ = e.delete_credential();
     }
     forget_old_keys(&id);
-    key_cache().lock().unwrap().remove(&id);
+    lock(key_cache()).remove(&id);
     Ok(())
 }
 
@@ -292,19 +294,34 @@ async fn fetch_b64(url: &str) -> Result<String, String> {
     Ok(B64.encode(read_body(resp).await?))
 }
 
+/// The optional images-protocol parameters this profile asks for, as
+/// (name, value): added to JSON bodies and multipart forms alike.
+fn optional_params(p: &Profile) -> Vec<(&'static str, String)> {
+    let mut out = Vec::new();
+    if let Some(q) = &p.quality {
+        out.push(("quality", q.clone()));
+    }
+    if p.transparent {
+        out.push(("background", "transparent".to_string()));
+    }
+    out
+}
+
+/// A JSON request body: `req` plus the profile's optional parameters.
+fn with_optional(mut req: Value, p: &Profile) -> Value {
+    for (name, value) in optional_params(p) {
+        req[name] = json!(value);
+    }
+    req
+}
+
 /// JSON `/images` with `input_references` (OpenRouter's image API).
 async fn images_with_references(p: &Profile, key: &str, prompt: &str, images: &[String], size: &str) -> Result<reqwest::Response, String> {
     let refs: Vec<Value> = images
         .iter()
         .map(|img| json!({ "type": "image_url", "image_url": { "url": format!("data:image/png;base64,{img}") } }))
         .collect();
-    let mut req = json!({ "model": p.model, "prompt": prompt, "size": size, "input_references": refs });
-    if let Some(q) = &p.quality {
-        req["quality"] = json!(q);
-    }
-    if p.transparent {
-        req["background"] = json!("transparent");
-    }
+    let req = with_optional(json!({ "model": p.model, "prompt": prompt, "size": size, "input_references": refs }), p);
     client()?
         .post(format!("{}/images", p.base_url))
         .bearer_auth(key)
@@ -324,13 +341,7 @@ async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], siz
         images_with_references(p, key, prompt, images, size).await?
     } else if images.is_empty() {
         // `n` is left out on purpose: 1 is the default and some relays reject it.
-        let mut req = json!({ "model": p.model, "prompt": prompt, "size": size });
-        if let Some(q) = &p.quality {
-            req["quality"] = json!(q);
-        }
-        if p.transparent {
-            req["background"] = json!("transparent");
-        }
+        let req = with_optional(json!({ "model": p.model, "prompt": prompt, "size": size }), p);
         http.post(format!("{}/images/generations", p.base_url))
             .bearer_auth(key)
             .json(&req)
@@ -342,11 +353,8 @@ async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], siz
             .text("model", p.model.clone())
             .text("prompt", prompt.to_string())
             .text("size", size.to_string());
-        if let Some(q) = &p.quality {
-            form = form.text("quality", q.clone());
-        }
-        if p.transparent {
-            form = form.text("background", "transparent");
+        for (name, value) in optional_params(p) {
+            form = form.text(name, value);
         }
         for (i, img) in images.iter().enumerate() {
             let bytes = B64.decode(img).map_err(|e| e.to_string())?;

@@ -9,6 +9,7 @@
 //! A 1 Hz watcher keeps the overlay on the right display, hides it while
 //! another app is fullscreen there and reports battery power (`power`).
 
+use crate::sync::lock;
 use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -40,7 +41,7 @@ pub fn refresh_geometry<R: Runtime>(window: &WebviewWindow<R>) {
         let scale = window.scale_factor().ok()?;
         Some(Geometry { x: p.x as f64, y: p.y as f64, width: s.width as f64, height: s.height as f64, scale })
     })();
-    *window.app_handle().state::<GeometryState>().0.lock().unwrap_or_else(|p| p.into_inner()) = g;
+    *lock(&window.app_handle().state::<GeometryState>().0) = g;
 }
 
 /// Cursor in logical (CSS) pixels relative to the window's top-left.
@@ -141,18 +142,18 @@ pub struct PowerState(Mutex<Power>);
 
 #[tauri::command]
 pub fn power_state(state: State<PowerState>) -> Power {
-    state.0.lock().unwrap().clone()
+    lock(&state.0).clone()
 }
 
 fn power<R: Runtime>(app: &AppHandle<R>) -> Power {
-    app.state::<PowerState>().0.lock().unwrap().clone()
+    lock(&app.state::<PowerState>().0).clone()
 }
 
 /// Re-read the power source now (e.g. after toggling the battery saver).
 pub fn refresh_power<R: Runtime>(app: &AppHandle<R>) {
     let battery = crate::settings::get(app).battery_saver && crate::system::on_battery();
     let state = app.state::<PowerState>();
-    let mut p = state.0.lock().unwrap();
+    let mut p = lock(&state.0);
     if p.battery != battery {
         p.battery = battery;
         let _ = app.emit_to(LABEL, "power", p.clone());
@@ -173,7 +174,7 @@ pub fn start_cursor_feed<R: Runtime>(app: AppHandle<R>) {
                 std::thread::sleep(Duration::from_millis(250));
                 continue;
             }
-            let geometry = *app.state::<GeometryState>().0.lock().unwrap_or_else(|p| p.into_inner());
+            let geometry = *lock(&app.state::<GeometryState>().0);
             if let (Some(window), Some(g)) = (app.get_webview_window(LABEL), geometry) {
                 let pos = window
                     .cursor_position()
@@ -224,7 +225,7 @@ pub fn start_watcher<R: Runtime>(app: AppHandle<R>) {
                 let battery = tick.is_multiple_of(30).then(|| settings.battery_saver && crate::system::on_battery());
 
                 let state = app.state::<PowerState>();
-                let mut p = state.0.lock().unwrap();
+                let mut p = lock(&state.0);
                 let mut changed = false;
                 if p.paused != fullscreen {
                     p.paused = fullscreen;

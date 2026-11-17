@@ -32,18 +32,15 @@ pub struct Run {
 
 #[tauri::command(async)]
 pub fn hatch_put_image(app: AppHandle, name: String, png: String) -> Result<(), String> {
-    let d = dir(&app)?;
-    fs::create_dir_all(&d).map_err(|e| e.to_string())?;
+    let path = dir(&app)?.join(format!("{}.png", checked(&name)?));
     let bytes = B64.decode(png).map_err(|e| e.to_string())?;
-    crate::fsutil::write_atomic(&d.join(format!("{}.png", checked(&name)?)), &bytes).map_err(|e| e.to_string())
+    crate::fsutil::write_atomic(&path, &bytes).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
 pub fn hatch_put_meta(app: AppHandle, meta: serde_json::Value) -> Result<(), String> {
-    let d = dir(&app)?;
-    fs::create_dir_all(&d).map_err(|e| e.to_string())?;
     let json = serde_json::to_vec_pretty(&meta).map_err(|e| e.to_string())?;
-    crate::fsutil::write_atomic(&d.join("meta.json"), &json).map_err(|e| e.to_string())
+    crate::fsutil::write_atomic(&dir(&app)?.join("meta.json"), &json).map_err(|e| e.to_string())
 }
 
 #[tauri::command(async)]
