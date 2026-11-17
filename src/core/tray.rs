@@ -56,8 +56,8 @@ fn menu<R: Runtime>(app: &AppHandle<R>, with_quit: bool) -> tauri::Result<Menu<R
         items.push(Box::new(MenuItem::with_id(app, "update", format!("有新版本 {v}，查看更新…"), true, None::<&str>)?));
     }
     items.push(Box::new(PredefinedMenuItem::separator(app)?));
-    items.push(Box::new(MenuItem::with_id(app, "reset", "叫TA回来", true, None::<&str>)?));
-    items.push(Box::new(MenuItem::with_id(app, "sleep", "哄TA睡觉", true, None::<&str>)?));
+    items.push(Box::new(MenuItem::with_id(app, "reset", "叫 TA 回来", true, None::<&str>)?));
+    items.push(Box::new(MenuItem::with_id(app, "sleep", "哄 TA 睡觉", true, None::<&str>)?));
     if with_quit {
         items.push(Box::new(PredefinedMenuItem::separator(app)?));
         items.push(Box::new(MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?));
