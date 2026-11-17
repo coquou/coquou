@@ -135,8 +135,11 @@ $("file").addEventListener("change", (e) => setReference(e.target.files[0]));
 window.hatchSetReference = setReference;
 
 // ---------- estimate ----------
+// Look rows (and their cardinal anchors) only when 16 directions are wanted.
+const wanted = (s, withLook) => withLook || !(s.look || s.cardinal);
+// Rows to generate; mirrored rows are derived, not generated.
 function plannedStates() {
-  return S.filter((s) => !s.mirrorOf && (!(s.look || s.cardinal) || $("withLook").checked));
+  return S.filter((s) => !s.mirrorOf && wanted(s, $("withLook").checked));
 }
 function updateEstimate() {
   const n = 1 + plannedStates().length;
@@ -167,7 +170,7 @@ async function offerResume() {
   const run = await invoke("hatch_load").catch(() => null);
   if (!run?.images?.base) return;
   const m = run.meta || {};
-  const planned = S.filter((s) => !s.mirrorOf && (!(s.look || s.cardinal) || m.withLook)).length;
+  const planned = S.filter((s) => !s.mirrorOf && wanted(s, m.withLook)).length;
   const done = Object.keys(run.images).filter((k) => k.startsWith("row-")).length;
   const area = $("baseArea");
   area.className = "resume";
@@ -283,7 +286,7 @@ function renderCards() {
   const box = $("cards");
   box.innerHTML = "";
   for (const s of S) {
-    if ((s.look || s.cardinal) && !$("withLook").checked) continue;
+    if (!wanted(s, $("withLook").checked)) continue;
     const r = st.rows[s.id] || { status: "idle" };
     const card = document.createElement("div"); card.className = "hcard"; card.id = "card-" + s.id;
     const pill = { idle: ["等待", ""], run: ["生成中…", "run"], ok: ["完成", "ok"], warn: ["有提醒", "warn"], bad: ["失败", "bad"] }[r.status];
@@ -409,8 +412,7 @@ $("genBase").addEventListener("click", genBase);
 $("genAll").addEventListener("click", genAll);
 
 function afterRows() {
-  const needed = S.filter((s) => !(s.look || s.cardinal) || $("withLook").checked);
-  const bad = needed.filter((s) => !["ok", "warn"].includes(st.rows[s.id]?.status));
+  const bad = S.filter((s) => wanted(s, $("withLook").checked) && !ready(s.id));
   if (bad.length) {
     setStatus($("rowsStatus"), `还差：${bad.map((s) => s.label).join("、")}`, bad.some((s) => st.rows[s.id]?.status === "bad") ? "bad" : "");
     $("finalArea").hidden = true;

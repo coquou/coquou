@@ -383,7 +383,6 @@ function renderWelcome() {
     : "宠物会在屏幕底部的角落里溜达。Coquou 住在屏幕右下角的通知区域（可能在「^」里），单击图标打开这个窗口，右键图标或者右键点宠物，可以叫 TA 回来、哄 TA 睡觉。";
 }
 $("welcomeOk").onclick = () => setPrefs({ welcomeDismissed: true });
-$("dropHint").textContent = "把 .pet / .zip 宠物包拖进这个窗口，或拖到桌面上的宠物身上，都能安装。";
 
 // ---------- behaviour ----------
 function zoneSvg(spans) {

@@ -6,7 +6,10 @@
 // grid into frames → normalise scale / ground line → 8×11 atlas of 192×208.
 
 const HATCH = (() => {
-  const CELL_W = 192, CELL_H = 208, COLS = 8, ROWS = 11;
+  // Codex v2 atlas (common.js; doc/pet-format.md).
+  const [CELL_W, CELL_H] = window.Coquou.CELL;
+  const { COLS } = window.Coquou;
+  const ROWS = 11;
   const TARGET_H = 150;   // idle body height inside a 208 px cell (room for raised arms)
   const FOOT_PAD = 10;    // ground line distance from the cell bottom
 

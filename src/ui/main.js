@@ -8,7 +8,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
-const { DEFAULT_LINES } = window.Coquou;
+const { DEFAULT_LINES, platform } = window.Coquou;
 window.Coquou.mirrorConsole("overlay");
 
 const stage = document.getElementById("stage");
@@ -37,8 +37,8 @@ const pause = () => { const [a, b] = ACTIVITY[prefs.activity].pause; return a + 
 const pet = {
   x: 300, y: -120, vx: 0, vy: 0,
   facing: 1, face: 1, state: "air", stateT: 0, nextDecision: 2,
-  blinkUntil: 0, nextBlink: 3, faceOverride: null, loved: 0,
-  look: null, swing: 0, lastTouch: 0,
+  happyUntil: 0, loved: 0, lookAngle: null, swing: 0, lastTouch: 0,
+  target: null, // x the pet walks back to when it is outside its zone
 };
 
 let W = 0, H = 0, dpr = 1;
@@ -66,7 +66,6 @@ function setState(s) {
   }
 }
 function touch(t) { pet.lastTouch = t; }
-function showFace(face, t, dur) { pet.faceOverride = { face, until: t + dur }; }
 
 // ---------- particles (hearts, Zzz, !) ----------
 const particles = [];
@@ -169,11 +168,10 @@ async function hopScreens() {
 
 function onClick() {
   if (pet.state === "sleep") {
-    showFace("shock", clock, 0.8);
     emit("!", "#ff9f1c", 28, pet.x + 20, pet.y - renderer.height - 20, 0, -40, 0.8);
     chat("wake", true);
   } else {
-    showFace("happy", clock, 1.2);
+    pet.happyUntil = clock + 1.2;
     hearts(3);
     chat("click");
   }
@@ -326,7 +324,6 @@ listen("pet-installed", async ({ payload }) => {
   }
 });
 listen("pet-install-failed", ({ payload }) => {
-  showFace("shock", clock, 1.5);
   say(`装不上${payload.file ? " " + payload.file : ""}：${payload.error}`, 5);
 });
 listen("update-available", ({ payload }) => {
@@ -398,22 +395,16 @@ function nearestHome(x) {
 function think(t, dt) {
   pet.stateT += dt;
 
-  if (t > pet.nextBlink) { pet.blinkUntil = t + 0.14; pet.nextBlink = t + 2 + Math.random() * 4; }
-
-  // Eyes follow the cursor when it's close.
+  // Pets with look rows (Codex v2) turn toward a recently moved, nearby
+  // cursor. 0° = up, clockwise; a deadzone around the head falls back to idle.
   if (cursor) {
-    const dx = cursor[0] - pet.x, dy = cursor[1] - (pet.y - 60);
-    const dist = Math.hypot(dx, dy);
-    pet.look = dist < 400 ? [dx / Math.max(dist, 1), dy / Math.max(dist, 1)] : null;
-    // Sprite pets with look rows turn toward a recently moved, nearby cursor.
-    // 0° = up, clockwise; a deadzone around the head falls back to idle.
     const hy = pet.y - renderer.height * 0.6;
     const ldx = cursor[0] - pet.x, ldy = cursor[1] - hy, ld = Math.hypot(ldx, ldy);
     const recent = t - lastCursorMove < 2.5;
     pet.lookAngle = recent && ld > renderer.width * 0.6 && ld < 500
       ? (Math.atan2(ldx, -ldy) * 180 / Math.PI + 360) % 360 : null;
   } else {
-    pet.look = null; pet.lookAngle = null;
+    pet.lookAngle = null;
   }
 
   switch (pet.state) {
@@ -478,7 +469,7 @@ function petting(t, dt, hovering) {
     if (rub > 700) {
       rub = 0; touch(t);
       if (pet.state === "sleep" || pet.state === "walk") setState("idle");
-      pet.loved = t + 2.5; showFace("happy", t, 2.5); hearts(4);
+      pet.loved = t + 2.5; hearts(4);
       chat("pet");
     }
   }
@@ -569,8 +560,7 @@ async function useFallback(pets, except) {
   if (!prefs.firstRunDone) {
     invoke("prefs_set", { patch: { firstRunDone: true } }).catch(() => {});
     invoke("open_window", { name: "app" }).catch(() => {});
-    const mac = /Mac/.test(navigator.userAgent);
-    setTimeout(() => say(mac
+    setTimeout(() => say(platform === "macos"
       ? "你好呀！我住在屏幕右上角的菜单栏里，点那里的图标或者右键点我，可以叫我回来、哄我睡觉"
       : "你好呀！我住在屏幕右下角的通知区域，单击图标打开主窗口，右键图标或者右键点我，可以叫我回来、哄我睡觉", 8), 1500);
   }

@@ -108,8 +108,7 @@ async function loadSpritePet(entry) {
       case "sleep": return has("sleep") ? { name: "sleep" } : { name: "idle", frame: 0 };
     }
     if (p.loved > t) return { name: has("loved") ? "loved" : "waving" };
-    if (p.faceOverride && p.faceOverride.until > t && p.faceOverride.face === "happy")
-      return { name: has("happy") ? "happy" : "waving" };
+    if (p.happyUntil > t) return { name: has("happy") ? "happy" : "waving" };
     if (version >= 2 && p.lookAngle != null) return { look: p.lookAngle };
     return { name: "idle" };
   }

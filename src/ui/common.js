@@ -89,6 +89,6 @@
 
   window.Coquou = {
     mirrorConsole, platform, keystore, DEFAULT_LINES,
-    CELL, COLS, ROWS, LOOK_ROWS, petBytes, petImage, petJson, loadAtlas,
+    CELL, COLS, ROWS, LOOK_ROWS, petImage, loadAtlas,
   };
 })();
