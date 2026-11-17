@@ -75,6 +75,7 @@ src/
   tests/                 测试工具
     mock-image-api.py    模拟图像接口（孵化离线自测）
     analyze-atlas.py     图集质量分析
+.github/workflows/       Deploy：推送版本标签后自动发版，见 releasing.md
 out/                     发版产物（不进仓库）
 target/ / gen/           编译输出（不进仓库）
 ```

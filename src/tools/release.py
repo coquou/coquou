@@ -1,31 +1,29 @@
 #!/usr/bin/env python3
 """Build and publish a Coquou release on GitHub (used by the in-app updater).
 
-The updater signing key lives only on the release Mac
-(~/.tauri/coquou-updater.key, or $COQUOU_UPDATER_KEY). The Windows machine
-just builds and uploads its installer; the Mac signs it and publishes.
+Releases are made by the Deploy workflow (.github/workflows/deploy.yml) when
+a version tag is pushed; it runs the commands below. See doc/releasing.md.
 
-    # Mac: set the version, commit, push
+    # set the version (then commit, tag vX.Y.Z and push the tag)
     python3 src/tools/release.py bump 0.1.1
 
-    # Mac: build + sign the macOS update bundle and DMG, upload to a draft release
+    # each platform: build the installer and the signed update bundle into out/<version>/
     python3 src/tools/release.py build [--universal]
+
+    # once all platforms are in out/<version>/: upload them to a draft release,
+    # write latest.json and publish
     python3 src/tools/release.py upload --notes-file notes.md
-
-    # Windows: build the NSIS installer, upload it to the same draft
-    py src\\tools\\release.py build
-    py src\\tools\\release.py upload
-
-    # Mac: sign what's unsigned, write latest.json, publish the draft
     python3 src/tools/release.py publish
 
-`upload` and `publish` use the GitHub CLI; run them with a token that can
-write to the repo, e.g. GH_TOKEN=$(gh auth token -u <owner>).
+The updater signing key comes from $TAURI_SIGNING_PRIVATE_KEY (CI) or the
+file ~/.tauri/coquou-updater.key ($COQUOU_UPDATER_KEY overrides the path).
+`upload` and `publish` use the GitHub CLI with a token that can write to the
+repo ($GH_TOKEN).
 
 The macOS app is signed with the "Coquou Self-Signed" certificate from the
-login keychain (doc/releasing.md), so every release keeps keychain access
-across updates. COQUOU_SIGN_IDENTITY names a different certificate; without
-one, `build` stops unless given --unsigned.
+keychain (doc/releasing.md), so every release keeps keychain access across
+updates. COQUOU_SIGN_IDENTITY names a different certificate; without one,
+`build` stops unless given --unsigned.
 """
 import argparse
 import datetime
@@ -45,7 +43,7 @@ CARGO = ROOT / "Cargo.toml"
 REPO = "coquou/coquou"
 NPX = "npx.cmd" if os.name == "nt" else "npx"
 CLI = [NPX, "-y", "@tauri-apps/cli@2"]
-KEY = Path(os.environ.get("COQUOU_UPDATER_KEY", Path.home() / ".tauri" / "coquou-updater.key"))
+KEY_FILE = Path(os.environ.get("COQUOU_UPDATER_KEY", Path.home() / ".tauri" / "coquou-updater.key"))
 SIGN_IDENTITY = os.environ.get("COQUOU_SIGN_IDENTITY", "Coquou Self-Signed")
 
 
@@ -54,6 +52,16 @@ def has_identity(name):
     found = subprocess.run(["security", "find-identity", "-p", "codesigning"],
                            capture_output=True, text=True, check=True).stdout
     return f'"{name}"' in found
+
+
+def updater_key():
+    """The updater signing key: from the environment in CI, else the key file."""
+    key = os.environ.get("TAURI_SIGNING_PRIVATE_KEY", "").strip()
+    if key:
+        return key
+    if not KEY_FILE.is_file():
+        sys.exit(f"updater key not found: set TAURI_SIGNING_PRIVATE_KEY or put it in {KEY_FILE}")
+    return KEY_FILE.read_text().strip()
 
 
 def run(cmd, **kw):
@@ -91,7 +99,8 @@ def cmd_bump(a):
     cargo = re.sub(r'(?m)^version = "[^"]+"', f'version = "{a.version}"', cargo, count=1)
     CARGO.write_text(cargo, encoding="utf-8")
     run(["cargo", "update", "-p", "coquou", "--offline"], cwd=ROOT)
-    print(f"{old} → {a.version}. Commit and push, then build on each machine.")
+    print(f"{old} → {a.version}. Commit and push, then tag v{a.version} with the release notes "
+          f"and push the tag; the Deploy workflow builds and publishes it.")
 
 
 # ---------- build ----------
@@ -100,12 +109,11 @@ def cmd_build(a):
     out = out_dir()
     v = version()
     env = dict(os.environ)
+    env["TAURI_SIGNING_PRIVATE_KEY"] = updater_key()
+    env.setdefault("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", "")
+    updater = ["--config", json.dumps({"bundle": {"createUpdaterArtifacts": True}})]
     system = platform.system()
     if system == "Darwin":
-        if not KEY.is_file():
-            sys.exit(f"updater key not found: {KEY}")
-        env["TAURI_SIGNING_PRIVATE_KEY"] = KEY.read_text().strip()
-        env.setdefault("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", "")
         if has_identity(SIGN_IDENTITY):
             env["APPLE_SIGNING_IDENTITY"] = SIGN_IDENTITY
         elif a.unsigned:
@@ -116,7 +124,7 @@ def cmd_build(a):
             sys.exit(f'code-signing certificate "{SIGN_IDENTITY}" is not in the keychain '
                      f'(doc/releasing.md); import it, or pass --unsigned')
         target = "universal-apple-darwin" if a.universal else None
-        cmd = CLI + ["build", "--bundles", "app,dmg", "--config", json.dumps({"bundle": {"createUpdaterArtifacts": True}})]
+        cmd = CLI + ["build", "--bundles", "app,dmg", *updater]
         if target:
             cmd += ["--target", target]
         run(cmd, cwd=ROOT, env=env)
@@ -128,13 +136,14 @@ def cmd_build(a):
         for dmg in (base / "dmg").glob("*.dmg"):
             shutil.copy(dmg, out / f"Coquou_{v}_macos-{arch}.dmg")
     elif system == "Windows":
-        # No key here: the Mac signs the installer during `publish`.
-        cmd = CLI + ["build", "--bundles", "nsis", "--config", json.dumps({"bundle": {"createUpdaterArtifacts": False}})]
-        run(cmd, cwd=ROOT, env=env)
+        # The installer doubles as the update bundle; createUpdaterArtifacts signs it.
+        run(CLI + ["build", "--bundles", "nsis", *updater], cwd=ROOT, env=env)
         exes = sorted((ROOT / "target" / "release" / "bundle" / "nsis").glob(f"*_{v}_*-setup.exe"))
         if not exes:
             sys.exit("NSIS installer not found")
-        shutil.copy(exes[-1], out / f"Coquou_{v}_windows-x86_64-setup.exe")
+        exe = out / f"Coquou_{v}_windows-x86_64-setup.exe"
+        shutil.copy(exes[-1], exe)
+        shutil.copy(Path(str(exes[-1]) + ".sig"), Path(str(exe) + ".sig"))
     else:
         sys.exit(f"unsupported build host: {system}")
     print("built into", out)
@@ -179,8 +188,6 @@ PLATFORM_OF = [
 
 
 def cmd_publish(a):
-    if not KEY.is_file():
-        sys.exit(f"publish needs the updater key {KEY} (run it on the release Mac)")
     v = version()
     tag = f"v{v}"
     info = json.loads(gh("release", "view", tag, "--repo", REPO, "--json", "body,assets,isDraft", capture=True))
@@ -193,11 +200,8 @@ def cmd_publish(a):
             continue
         sig = name + ".sig"
         if sig not in names:
-            gh("release", "download", tag, "--repo", REPO, "--pattern", name, "--dir", str(work))
-            run(CLI + ["signer", "sign", "-f", str(KEY), "-p", "", str(work / name)])
-            gh("release", "upload", tag, "--repo", REPO, "--clobber", str(work / sig))
-        else:
-            gh("release", "download", tag, "--repo", REPO, "--pattern", sig, "--dir", str(work))
+            sys.exit(f"{name} has no {sig}; build it with the updater key")
+        gh("release", "download", tag, "--repo", REPO, "--pattern", sig, "--dir", str(work))
         signature = (work / sig).read_text().strip()
         url = f"https://github.com/{REPO}/releases/download/{tag}/{name}"
         for k in keys:
