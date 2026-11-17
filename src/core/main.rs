@@ -220,19 +220,22 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building Coquou");
 
+    #[cfg(target_os = "macos")]
     app.run(|app, event| match event {
-        // macOS: clicking Coquou in Finder / Launchpad while it runs (but not
-        // a click on the pet, which macOS reports the same way).
-        #[cfg(target_os = "macos")]
+        // Clicking Coquou in Finder / Launchpad while it runs (but not a
+        // click on the pet, which macOS reports the same way).
         tauri::RunEvent::Reopen { .. } if !overlay::reopen_is_pet_click(app) => windows::open_app(app, None),
         // macOS delivers double-clicked files as an "open URLs" event.
-        #[cfg(target_os = "macos")]
         tauri::RunEvent::Opened { urls } => {
             let paths = urls.iter().filter_map(|u| u.to_file_path().ok()).collect();
             library::install_paths_in_background(app, paths);
         }
         _ => {}
     });
+    // Windows passes relaunches and double-clicked files as command-line
+    // arguments (single-instance plugin), so no run events need handling.
+    #[cfg(not(target_os = "macos"))]
+    app.run(|_, _| {});
 }
 
 #[cfg(test)]

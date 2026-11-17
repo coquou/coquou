@@ -77,6 +77,7 @@ pub fn set_passthrough(window: WebviewWindow, state: State<MouseState>, enabled:
 /// Coquou to the front, so a click on the pet looks like clicking Coquou in
 /// Finder. Such a click can only land on the pet while the overlay catches
 /// the mouse; a launch from Finder / Launchpad never does.
+#[cfg(target_os = "macos")]
 pub fn reopen_is_pet_click<R: Runtime>(app: &AppHandle<R>) -> bool {
     app.try_state::<MouseState>().is_some_and(|s| s.0.load(Ordering::Relaxed))
 }
