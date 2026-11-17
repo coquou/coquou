@@ -6,6 +6,8 @@
 - key tint: opaque pixels still tinted toward green / magenta (fringe)
 - body width per row: widest opaque run in the lower half of each frame,
   averaged per row (rows should match if the scale is consistent)
+- body drift per row: largest frame-to-frame (and last-to-first) jump of the
+  upper body's mean x; a few px reads as the body sliding sideways
 """
 import struct, sys, zlib
 
@@ -47,8 +49,13 @@ for i in range(0, len(px), 4):
 print(f"opaque px {opaque}, green-tinted {tint_g} ({tint_g / max(opaque, 1):.2%}), magenta-tinted {tint_m} ({tint_m / max(opaque, 1):.2%})")
 CW, CH = 192, 208
 for row in range(h // CH):
-    widths = []
+    widths, bodies = [], []
     for col in range(w // CW):
+        xs = [(x, y) for y in range(CH) for x in range(CW) if px[((row * CH + y) * w + col * CW + x) * 4 + 3] > 128]
+        if xs:
+            y0, y1 = min(y for _, y in xs), max(y for _, y in xs)
+            up = [x for x, y in xs if y < y0 + (y1 - y0 + 1) * 0.55]
+            bodies.append(sum(up) / len(up))
         best, top = 0, None
         for y in range(CH):
             yy = row * CH + y
@@ -59,4 +66,5 @@ for row in range(h // CH):
             if run and top is None: top = y
             if top is not None and y > (top + CH) / 2: best = max(best, run)
         if best: widths.append(best)
-    if widths: print(f"row {row:2d}: body width {sum(widths) / len(widths):5.1f} px over {len(widths)} frames")
+    drift = max((abs(bodies[i] - bodies[i - 1]) for i in range(len(bodies))), default=0) if len(bodies) > 1 else 0
+    if widths: print(f"row {row:2d}: body width {sum(widths) / len(widths):5.1f} px over {len(widths)} frames, body drift {drift:4.1f} px")

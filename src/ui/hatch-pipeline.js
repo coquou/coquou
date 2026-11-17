@@ -13,6 +13,7 @@ const HATCH = (() => {
   const { t } = window.Coquou;
   const TARGET_H = 150;   // idle body height inside a 208 px cell (room for raised arms)
   const FOOT_PAD = 10;    // ground line distance from the cell bottom
+  const BODY_BAND = 0.55; // upper share of a frame whose pixels give its horizontal anchor
 
   const KEY_RGB = { green: [0, 255, 0], magenta: [255, 0, 255] };
   const KEY_WORDS = {
@@ -303,16 +304,25 @@ const HATCH = (() => {
       const fw = box.maxX - box.minX + 1, fh = box.maxY - box.minY + 1;
       const ids = new Set(parts.map((c) => c.id));
       const out = new ImageData(fw, fh);
-      let area = 0;
+      // Body anchor: mean x of the opaque pixels in the upper part of the
+      // frame. Legs and swinging limbs widen the bounding box from frame to
+      // frame (a walk's stride vs. passing pose), so centring the box slides
+      // the body sideways; the head and torso stay put.
+      const upper = fh * BODY_BAND;
+      let area = 0, bodySum = 0, bodyN = 0;
       for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
         const sx = box.minX + x, sy = box.minY + y, p = sy * w + sx;
         const lab = labels[p];
         // Keep soft edge pixels next to the frame's own components too.
         if (lab === -1 ? data[p * 4 + 3] === 0 : !ids.has(lab)) continue;
         out.data.set(data.subarray(p * 4, p * 4 + 4), (y * fw + x) * 4);
-        if (data[p * 4 + 3] >= 128) area++;
+        if (data[p * 4 + 3] >= 128) {
+          area++;
+          if (y < upper) { bodySum += x; bodyN++; }
+        }
       }
-      frames.push({ image: out, w: fw, h: fh, ch, sheetRow: Math.floor(i / cols), area, bottom: box.maxY - cy0, centerX: (box.minX + box.maxX) / 2 - cx0 });
+      const bodyX = bodyN ? bodySum / bodyN : fw / 2;
+      frames.push({ image: out, w: fw, h: fh, ch, sheetRow: Math.floor(i / cols), area, bottom: box.maxY - cy0, bodyX });
     }
     return { frames, warnings };
   }
@@ -335,7 +345,8 @@ const HATCH = (() => {
   }
 
   /**
-   * Scale a row into 192×208 cells and put every frame on one ground line.
+   * Scale a row into 192×208 cells, put every frame on one ground line and
+   * its body (not its bounding box) on the cell's vertical centre line.
    * `scale` (cell px per sheet px) comes from layoutAll so every row shows
    * the character at the same size; without it the row sizes itself from
    * its body height (previews).
@@ -357,7 +368,10 @@ const HATCH = (() => {
       const dw = f.w * s, dh = f.h * s;
       const room = Math.max(0, CELL_H - FOOT_PAD - 4 - dh);
       const up = lift ? Math.min((ground.get(f.sheetRow) - f.bottom) * s, room) : 0;
-      return { image: f.image, w: f.w, h: f.h, dx: CELL_W / 2 - dw / 2, dy: CELL_H - FOOT_PAD - up - dh, dw, dh };
+      // Body anchor on the cell centre, clamped so the frame stays inside
+      // (the scale above already makes every frame fit the cell width).
+      const dx = Math.min(Math.max(CELL_W / 2 - f.bodyX * s, 3), CELL_W - 3 - dw);
+      return { image: f.image, w: f.w, h: f.h, dx, dy: CELL_H - FOOT_PAD - up - dh, dw, dh };
     });
   }
 
