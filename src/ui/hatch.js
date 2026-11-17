@@ -43,7 +43,9 @@ $("editProfile").addEventListener("click", () => showForm(true));
 function currentProfile() {
   return st.profiles.find((p) => p.id === $("profile").value) || null;
 }
-function fillForm(p) {
+// keepOpen: leave the form showing (testing reports its result in the form's
+// status line, which the summary would hide).
+function fillForm(p, keepOpen = false) {
   $("pName").value = p?.name || "";
   $("pProtocol").value = p?.protocol || "images";
   $("pUrl").value = p?.baseUrl || "";
@@ -54,18 +56,18 @@ function fillForm(p) {
   $("pTransparent").checked = !!p?.transparent;
   $("deleteProfile").disabled = !p;
   $("imagesOpts").hidden = $("pProtocol").value !== "images";
-  showForm(false);
+  showForm(keepOpen);
 }
-async function loadProfiles(selectId) {
+async function loadProfiles(selectId, keepOpen = false) {
   st.profiles = await invoke("ai_profiles");
   const sel = $("profile");
   sel.innerHTML = "";
   for (const p of st.profiles) sel.add(new Option(`${p.name}${p.hasKey ? "" : "（未填 key）"}`, p.id));
   sel.add(new Option("＋ 新建配置…", ""));
   sel.value = selectId ?? (st.profiles[0]?.id || "");
-  fillForm(currentProfile());
+  fillForm(currentProfile(), keepOpen);
 }
-async function saveProfile() {
+async function saveProfile(keepOpen = false) {
   const cur = currentProfile();
   const profile = {
     id: cur?.id || "",
@@ -78,7 +80,7 @@ async function saveProfile() {
     edits: cur?.edits ?? null,
   };
   const saved = await invoke("ai_save_profile", { profile, apiKey: $("pKey").value || null });
-  await loadProfiles(saved.id);
+  await loadProfiles(saved.id, keepOpen);
   return saved;
 }
 $("profile").addEventListener("change", () => fillForm(currentProfile()));
@@ -92,12 +94,12 @@ $("testProfile").title = "会真的生成 1 张小图，产生一次调用费用
 $("testProfile").addEventListener("click", async () => {
   const el = $("profileStatus");
   try {
-    const p = await saveProfile();
+    const p = await saveProfile(true);
     setStatus(el, "测试中…（生成 1 张图）");
     const t0 = performance.now();
     const b64 = await invoke("ai_generate", { profileId: p.id, prompt: "A small red heart sticker on a plain white background.", images: [], size: "1024x1024" });
     const bmp = await HATCH.decode(b64);
-    await loadProfiles(p.id); // the backend may have switched off unsupported options
+    await loadProfiles(p.id, true); // the backend may have switched off unsupported options
     const dropped = p.transparent && !currentProfile()?.transparent ? "（这个模型不支持透明背景，已自动关闭该选项）" : "";
     setStatus(el, `连接正常：${bmp.width}×${bmp.height}，用时 ${((performance.now() - t0) / 1000).toFixed(1)} 秒${dropped}`, "ok");
   } catch (e) { setStatus(el, String(e), "bad"); }
