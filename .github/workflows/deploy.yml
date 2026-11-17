@@ -29,15 +29,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Tag matches the app version
-        shell: bash
-        run: |
-          v=$(${{ matrix.python }} -c "import json; print(json.load(open('tauri.conf.json'))['version'])")
-          if [ "v$v" != "$GITHUB_REF_NAME" ]; then
-            echo "::error::tag $GITHUB_REF_NAME does not match tauri.conf.json version $v"
-            exit 1
-          fi
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -71,7 +62,7 @@ jobs:
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
-        run: ${{ matrix.python }} src/tools/release.py build ${{ matrix.args }}
+        run: ${{ matrix.python }} src/tools/release.py build ${{ matrix.args }} --tag "$GITHUB_REF_NAME"
 
       - uses: actions/upload-artifact@v4
         with:

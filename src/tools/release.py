@@ -8,7 +8,7 @@ a version tag is pushed; it runs the commands below. See doc/releasing.md.
     python3 src/tools/release.py bump 0.1.1
 
     # each platform: build the installer and the signed update bundle into out/<version>/
-    python3 src/tools/release.py build [--universal]
+    python3 src/tools/release.py build [--universal] [--tag vX.Y.Z]
 
     # once all platforms are in out/<version>/: upload them to a draft release,
     # write latest.json and publish
@@ -106,8 +106,10 @@ def cmd_bump(a):
 # ---------- build ----------
 
 def cmd_build(a):
-    out = out_dir()
     v = version()
+    if a.tag and a.tag != f"v{v}":
+        sys.exit(f"tag {a.tag} does not match tauri.conf.json version {v}")
+    out = out_dir()
     env = dict(os.environ)
     env["TAURI_SIGNING_PRIVATE_KEY"] = updater_key()
     env.setdefault("TAURI_SIGNING_PRIVATE_KEY_PASSWORD", "")
@@ -230,7 +232,8 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("bump"); b.add_argument("version"); b.set_defaults(fn=cmd_bump)
     b = sub.add_parser("build"); b.add_argument("--universal", action="store_true", help="macOS: Intel + Apple Silicon")
-    b.add_argument("--unsigned", action="store_true", help="macOS: build without the code-signing certificate"); b.set_defaults(fn=cmd_build)
+    b.add_argument("--unsigned", action="store_true", help="macOS: build without the code-signing certificate")
+    b.add_argument("--tag", help="stop unless this release tag is v<app version>"); b.set_defaults(fn=cmd_build)
     b = sub.add_parser("upload"); b.add_argument("--notes"); b.add_argument("--notes-file"); b.set_defaults(fn=cmd_upload)
     b = sub.add_parser("publish"); b.add_argument("--force", action="store_true", help="publish even if a platform is missing"); b.set_defaults(fn=cmd_publish)
     a = ap.parse_args()
