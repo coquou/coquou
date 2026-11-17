@@ -149,13 +149,27 @@ fn power<R: Runtime>(app: &AppHandle<R>) -> Power {
     lock(&app.state::<PowerState>().0).clone()
 }
 
+/// Battery mode (30 fps): the saver is on and the machine runs on battery.
+fn saving_battery(settings: &crate::settings::Settings) -> bool {
+    settings.battery_saver && crate::system::on_battery()
+}
+
+/// Record the battery mode; returns whether it changed.
+fn set_battery(p: &mut Power, battery: bool) -> bool {
+    if p.battery == battery {
+        return false;
+    }
+    log::info!("power source: {}", if battery { "battery → 30 fps" } else { "AC" });
+    p.battery = battery;
+    true
+}
+
 /// Re-read the power source now (e.g. after toggling the battery saver).
 pub fn refresh_power<R: Runtime>(app: &AppHandle<R>) {
-    let battery = crate::settings::get(app).battery_saver && crate::system::on_battery();
+    let battery = saving_battery(&crate::settings::get(app));
     let state = app.state::<PowerState>();
     let mut p = lock(&state.0);
-    if p.battery != battery {
-        p.battery = battery;
+    if set_battery(&mut p, battery) {
         let _ = app.emit_to(LABEL, "power", p.clone());
     }
 }
@@ -222,7 +236,7 @@ pub fn start_watcher<R: Runtime>(app: AppHandle<R>) {
                 })();
                 let settings = crate::settings::get(&app);
                 let fullscreen = settings.hide_fullscreen && rect.is_some_and(crate::system::fullscreen_app_on);
-                let battery = tick.is_multiple_of(30).then(|| settings.battery_saver && crate::system::on_battery());
+                let battery = tick.is_multiple_of(30).then(|| saving_battery(&settings));
 
                 let state = app.state::<PowerState>();
                 let mut p = lock(&state.0);
@@ -234,11 +248,7 @@ pub fn start_watcher<R: Runtime>(app: AppHandle<R>) {
                     log::info!("{}", if fullscreen { "fullscreen app → hidden" } else { "shown again" });
                 }
                 if let Some(b) = battery {
-                    if b != p.battery {
-                        log::info!("power source: {}", if b { "battery → 30 fps" } else { "AC" });
-                        p.battery = b;
-                        changed = true;
-                    }
+                    changed |= set_battery(&mut p, b);
                 }
                 if changed {
                     let _ = app.emit_to(LABEL, "power", p.clone());
