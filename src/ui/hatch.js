@@ -4,6 +4,7 @@
 // `window.hatchSetReference`).
 (() => {
 const { invoke } = window.__TAURI__.core;
+const { t } = window.Coquou;
 const ask = (title, text, ok) => window.coquouConfirm(title, text, ok);
 
 const $ = (id) => document.getElementById(id);
@@ -26,8 +27,10 @@ function setStatus(el, text, kind = "") {
 }
 
 // ---------- AI profiles ----------
-const KEYSTORE = window.Coquou.keystore;
-$("keyHint").textContent = `API key 只保存在本机系统的${KEYSTORE}里。`;
+const keystore = window.Coquou.keystore;
+const renderKeyHint = () => {
+  $("keyHint").textContent = t(`API key 只保存在本机系统的${keystore()}里。`, `The API key is only kept in this computer's ${keystore()}.`);
+};
 let editing = false; // the full form is shown; otherwise a one-line summary
 function showForm(open) {
   const p = currentProfile();
@@ -36,7 +39,8 @@ function showForm(open) {
   $("profileSummary").hidden = editing;
   if (p) {
     $("sumName").textContent = `${p.name} ✓`;
-    $("sumModel").textContent = `${p.model || "（未填模型）"} · ${p.protocol === "chat" ? "Chat 协议" : "Images 协议"} · key 已保存`;
+    const protocol = p.protocol === "chat" ? t("Chat 协议", "Chat protocol") : t("Images 协议", "Images protocol");
+    $("sumModel").textContent = `${p.model || t("（未填模型）", "(no model)")} · ${protocol} · ${t("key 已保存", "key saved")}`;
   }
 }
 $("editProfile").addEventListener("click", () => showForm(true));
@@ -51,27 +55,33 @@ function fillForm(p, keepOpen = false) {
   $("pUrl").value = p?.baseUrl || "";
   $("pModel").value = p?.model || "";
   $("pKey").value = "";
-  $("pKey").placeholder = p?.hasKey ? `已保存在${KEYSTORE}（留空不修改）` : "sk-…";
+  renderKeyPlaceholder(p);
   $("pQuality").value = p?.quality || "";
   $("pTransparent").checked = !!p?.transparent;
   $("deleteProfile").disabled = !p;
   $("imagesOpts").hidden = $("pProtocol").value !== "images";
   showForm(keepOpen);
 }
+function renderKeyPlaceholder(p) {
+  $("pKey").placeholder = p?.hasKey ? t(`已保存在${keystore()}（留空不修改）`, `Saved in ${keystore()} (leave empty to keep it)`) : "sk-…";
+}
 async function loadProfiles(selectId, keepOpen = false) {
   st.profiles = await invoke("ai_profiles");
+  renderProfileList(selectId ?? (st.profiles[0]?.id || ""));
+  fillForm(currentProfile(), keepOpen);
+}
+function renderProfileList(selectId) {
   const sel = $("profile");
   sel.innerHTML = "";
-  for (const p of st.profiles) sel.add(new Option(`${p.name}${p.hasKey ? "" : "（未填 key）"}`, p.id));
-  sel.add(new Option("＋ 新建配置…", ""));
-  sel.value = selectId ?? (st.profiles[0]?.id || "");
-  fillForm(currentProfile(), keepOpen);
+  for (const p of st.profiles) sel.add(new Option(`${p.name}${p.hasKey ? "" : t("（未填 key）", " (no key)")}`, p.id));
+  sel.add(new Option(t("＋ 新建配置…", "＋ New profile…"), ""));
+  sel.value = selectId;
 }
 async function saveProfile(keepOpen = false) {
   const cur = currentProfile();
   const profile = {
     id: cur?.id || "",
-    name: $("pName").value.trim() || "未命名",
+    name: $("pName").value.trim() || t("未命名", "Untitled"),
     protocol: $("pProtocol").value,
     baseUrl: $("pUrl").value.trim(),
     model: $("pModel").value.trim(),
@@ -87,30 +97,31 @@ $("profile").addEventListener("change", () => fillForm(currentProfile()));
 $("newProfile").addEventListener("click", () => { $("profile").value = ""; fillForm(null); showForm(true); $("pName").focus(); });
 $("pProtocol").addEventListener("change", () => { $("imagesOpts").hidden = $("pProtocol").value !== "images"; });
 $("saveProfile").addEventListener("click", async () => {
-  try { await saveProfile(); setStatus($("profileStatus"), "已保存", "ok"); }
+  try { await saveProfile(); setStatus($("profileStatus"), t("已保存", "Saved"), "ok"); }
   catch (e) { setStatus($("profileStatus"), String(e), "bad"); }
 });
-$("testProfile").title = "会真的生成 1 张小图，产生一次调用费用";
 $("testProfile").addEventListener("click", async () => {
   const el = $("profileStatus");
   try {
     const p = await saveProfile(true);
-    setStatus(el, "测试中…（生成 1 张图）");
+    setStatus(el, t("测试中…（生成 1 张图）", "Testing… (generating 1 image)"));
     const t0 = performance.now();
     const b64 = await invoke("ai_generate", { profileId: p.id, prompt: "A small red heart sticker on a plain white background.", images: [], size: "1024x1024" });
     const bmp = await HATCH.decode(b64);
     await loadProfiles(p.id, true); // the backend may have switched off unsupported options
-    const dropped = p.transparent && !currentProfile()?.transparent ? "（这个模型不支持透明背景，已自动关闭该选项）" : "";
-    setStatus(el, `连接正常：${bmp.width}×${bmp.height}，用时 ${((performance.now() - t0) / 1000).toFixed(1)} 秒${dropped}`, "ok");
+    const dropped = p.transparent && !currentProfile()?.transparent
+      ? t("（这个模型不支持透明背景，已自动关闭该选项）", " (this model can't do transparent backgrounds, so that option was turned off)") : "";
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    setStatus(el, t(`连接正常：${bmp.width}×${bmp.height}，用时 ${secs} 秒${dropped}`, `Works: ${bmp.width}×${bmp.height} in ${secs} s${dropped}`), "ok");
   } catch (e) { setStatus(el, String(e), "bad"); }
 });
 $("deleteProfile").addEventListener("click", async () => {
   const p = currentProfile();
-  if (!p || !(await ask(`删除配置「${p.name}」？`, "它保存的 API key 也会一起删除。"))) return;
+  if (!p || !(await ask(t(`删除配置「${p.name}」？`, `Delete the profile ${p.name}?`), t("它保存的 API key 也会一起删除。", "Its saved API key is deleted too.")))) return;
   try {
     await invoke("ai_delete_profile", { id: p.id });
     await loadProfiles();
-  } catch (e) { setStatus($("profileStatus"), "删除失败：" + e, "bad"); }
+  } catch (e) { setStatus($("profileStatus"), t("删除失败：", "Could not delete: ") + e, "bad"); }
 });
 
 // ---------- reference image ----------
@@ -125,9 +136,14 @@ function showReference() {
   drop.classList.add("has");
   drop.innerHTML = "";
   const img = new Image(); img.src = "data:image/png;base64," + st.refB64; drop.append(img);
-  const clear = document.createElement("button"); clear.className = "btn"; clear.type = "button"; clear.textContent = "移除";
-  clear.onclick = (e) => { e.stopPropagation(); st.refB64 = st.refData = null; drop.classList.remove("has"); drop.textContent = "点击选择，或把图片拖进窗口"; };
+  const clear = document.createElement("button"); clear.className = "btn"; clear.type = "button"; clear.textContent = t("移除", "Remove");
+  clear.onclick = (e) => { e.stopPropagation(); st.refB64 = st.refData = null; renderDropHint(); };
   drop.append(clear);
+}
+function renderDropHint() {
+  const drop = $("drop");
+  drop.classList.remove("has");
+  drop.textContent = t("点击选择，或把图片拖进窗口", "Click to choose, or drop an image on the window");
 }
 $("drop").addEventListener("click", () => $("file").click());
 $("file").addEventListener("change", (e) => setReference(e.target.files[0]));
@@ -143,7 +159,9 @@ function plannedStates() {
 }
 function updateEstimate() {
   const n = 1 + plannedStates().length;
-  $("estimate").innerHTML = `预计 <b>${n}</b> 次图像生成（形象 1 次、动作 ${n - 1} 次）。失败重试另计，费用按你的接口计费。`;
+  $("estimate").innerHTML = t(
+    `预计 <b>${n}</b> 次图像生成（形象 1 次、动作 ${n - 1} 次）。失败重试另计，费用按你的接口计费。`,
+    `About <b>${n}</b> image generations (1 for the look, ${n - 1} for animations), plus any retries, billed by your API provider.`);
 }
 $("withLook").addEventListener("change", updateEstimate);
 
@@ -176,14 +194,18 @@ async function offerResume() {
   area.className = "resume";
   area.innerHTML = "";
   const p = document.createElement("div");
-  p.textContent = `上次的孵化还没完成：「${m.name || "未命名"}」，动作已完成 ${done}/${planned} 行（${new Date(m.savedAt).toLocaleString()}）。继续的话，已生成的图不会重新收费。`;
-  const go = document.createElement("button"); go.className = "btn primary"; go.type = "button"; go.textContent = "继续上次";
-  const drop = document.createElement("button"); drop.className = "btn"; drop.type = "button"; drop.textContent = "丢弃";
+  const name = m.name || t("未命名", "Untitled");
+  const when = new Date(m.savedAt).toLocaleString(t("zh-CN", "en"));
+  p.textContent = t(
+    `上次的孵化还没完成：「${name}」，动作已完成 ${done}/${planned} 行（${when}）。继续的话，已生成的图不会重新收费。`,
+    `Your last hatch, ${name}, isn't finished: ${done}/${planned} animation rows done (${when}). Continuing doesn't pay again for images already made.`);
+  const go = document.createElement("button"); go.className = "btn primary"; go.type = "button"; go.textContent = t("继续上次", "Continue");
+  const drop = document.createElement("button"); drop.className = "btn"; drop.type = "button"; drop.textContent = t("丢弃", "Discard");
   go.onclick = () => restoreRun(run);
   drop.onclick = async () => {
-    if (!(await ask("丢弃上次的孵化？", "已经生成的图片都会删掉，无法恢复。", "丢弃"))) return;
+    if (!(await ask(t("丢弃上次的孵化？", "Discard the last hatch?"), t("已经生成的图片都会删掉，无法恢复。", "The images made so far are deleted for good."), t("丢弃", "Discard")))) return;
     await invoke("hatch_clear");
-    area.className = "empty"; area.textContent = "填好上面的接口和描述，点「生成形象」。";
+    renderBaseHint();
   };
   const acts = document.createElement("div"); acts.className = "acts"; acts.append(go, drop);
   area.append(p, acts);
@@ -211,15 +233,15 @@ async function restoreRun(run) {
   }
   relayout();
   renderCards();
-  setStatus($("mainStatus"), "已恢复上次的进度。点「生成全部动作」只会补上还没完成的行。", "ok");
+  setStatus($("mainStatus"), t("已恢复上次的进度。点「生成全部动作」只会补上还没完成的行。", "Picked up where you left off. “Generate all” only fills in the rows that aren't done."), "ok");
   afterRows();
 }
 
 // ---------- generation ----------
 async function generate(prompt, images, size) {
   const p = currentProfile();
-  if (!p) throw new Error("请先保存一个 AI 接口配置");
-  if (!p.hasKey) throw new Error("这个配置还没有填 API key");
+  if (!p) throw new Error(t("请先保存一个 AI 接口配置", "Save an AI service profile first"));
+  if (!p.hasKey) throw new Error(t("这个配置还没有填 API key", "This profile has no API key yet"));
   const out = await invoke("ai_generate", { profileId: p.id, prompt, images, size });
   return HATCH.toPngB64(out, 1536);
 }
@@ -234,9 +256,9 @@ function previewCanvas(cell) {
 async function genBase() {
   const desc = $("petDesc").value.trim();
   const el = $("mainStatus");
-  if (!st.refB64 && !desc) { setStatus(el, "请填写描述或选择一张参考图", "bad"); return false; }
+  if (!st.refB64 && !desc) { setStatus(el, t("请填写描述或选择一张参考图", "Write a description or choose a reference image"), "bad"); return false; }
   $("genBase").disabled = true;
-  setStatus(el, "正在生成形象…（通常 10–60 秒）");
+  setStatus(el, t("正在生成形象…（通常 10–60 秒）", "Generating the look… (usually 10–60 s)"));
   try {
     st.key = HATCH.chooseKey(st.refData, desc);
     const prompt = HATCH.basePrompt({ description: desc, style: $("style").value, key: st.key, hasReference: !!st.refB64 });
@@ -248,17 +270,25 @@ async function genBase() {
     if (st.refB64) saveImage("ref", st.refB64);
     saveImage("base", st.baseB64);
     saveMeta();
-    setStatus(el, "形象好了。满意的话点「生成全部动作」，不满意可以改描述后重新生成。", "ok");
+    setStatus(el, t("形象好了。满意的话点「生成全部动作」，不满意可以改描述后重新生成。", "The look is ready. Happy with it? Click “Generate all”. If not, change the description and generate again."), "ok");
     console.info("base ok", base.bgKind, base.warnings.join("; "));
     return true;
   } catch (e) {
-    setStatus(el, "生成失败：" + e, "bad");
+    setStatus(el, t("生成失败：", "Generation failed: ") + e, "bad");
     console.error("base failed", String(e));
     return false;
   } finally {
     $("genBase").disabled = false;
-    $("genBase").textContent = "重新生成形象";
+    renderGenBase();
   }
+}
+function renderGenBase() {
+  $("genBase").textContent = st.baseB64 ? t("重新生成形象", "Generate again") : t("生成形象", "Generate the look");
+}
+function renderBaseHint() {
+  const area = $("baseArea");
+  area.className = "empty";
+  area.textContent = t("填好上面的接口和描述，点「生成形象」。", "Fill in the service and description above, then click “Generate the look”.");
 }
 
 function renderBase(base) {
@@ -266,10 +296,10 @@ function renderBase(base) {
   area.className = "";
   area.innerHTML = "";
   const wrap = document.createElement("div"); wrap.className = "base";
-  const raw = new Image(); raw.className = "raw"; raw.src = "data:image/png;base64," + st.baseB64; raw.title = "模型原图";
-  const cut = previewCanvas(base.cell); cut.style.width = "192px"; cut.title = "抠图后";
+  const raw = new Image(); raw.className = "raw"; raw.src = "data:image/png;base64," + st.baseB64; raw.title = t("模型原图", "Model output");
+  const cut = previewCanvas(base.cell); cut.style.width = "192px"; cut.title = t("抠图后", "Cut out");
   const info = document.createElement("div");
-  info.innerHTML = `<p class="hint">左：模型原图　右：抠图并缩放到 192×208 后的效果</p>`
+  info.innerHTML = `<p class="hint">${t("左：模型原图　右：抠图并缩放到 192×208 后的效果", "Left: model output. Right: cut out and scaled to 192×208.")}</p>`
     + (base.warnings.length ? `<p class="hint" style="color:var(--warn)">${base.warnings.join("；")}</p>` : "");
   wrap.append(raw, cut, info);
   area.append(wrap);
@@ -289,25 +319,28 @@ function renderCards() {
     if (!wanted(s, $("withLook").checked)) continue;
     const r = st.rows[s.id] || { status: "idle" };
     const card = document.createElement("div"); card.className = "hcard"; card.id = "card-" + s.id;
-    const pill = { idle: ["等待", ""], run: ["生成中…", "run"], ok: ["完成", "ok"], warn: ["有提醒", "warn"], bad: ["失败", "bad"] }[r.status];
-    card.innerHTML = `<header><b>${s.label}</b><span class="pill ${pill[1]}">${s.mirrorOf ? "镜像 · " : ""}${pill[0]}</span></header>`;
+    const pill = {
+      idle: [t("等待", "Waiting"), ""], run: [t("生成中…", "Generating…"), "run"], ok: [t("完成", "Done"), "ok"],
+      warn: [t("有提醒", "Warnings"), "warn"], bad: [t("失败", "Failed"), "bad"],
+    }[r.status];
+    card.innerHTML = `<header><b>${s.label}</b><span class="pill ${pill[1]}">${s.mirrorOf ? t("镜像 · ", "Mirrored · ") : ""}${pill[0]}</span></header>`;
     const anim = document.createElement("canvas"); anim.className = "anim checker";
     anim.width = HATCH.CELL_W; anim.height = HATCH.CELL_H; anim.dataset.state = s.id;
     card.append(anim);
     const warn = document.createElement("div");
     warn.className = r.status === "bad" ? "bad" : "warn";
-    warn.textContent = r.status === "bad" ? r.error : (r.warnings || []).join("；");
+    warn.textContent = r.status === "bad" ? r.error : (r.warnings || []).join(t("；", "; "));
     card.append(warn);
     if (r.raw) {
       const d = document.createElement("details");
-      d.innerHTML = "<summary>模型原图</summary>";
+      d.innerHTML = `<summary>${t("模型原图", "Model output")}</summary>`;
       const img = new Image(); img.src = "data:image/png;base64," + r.raw; d.append(img);
       card.append(d);
     }
     if (!s.mirrorOf && r.status !== "idle") {
       const note = document.createElement("input");
       note.type = "text"; note.className = "note"; note.maxLength = 200;
-      note.placeholder = "想怎么改（可选），比如：腿迈得再大一点";
+      note.placeholder = t("想怎么改（可选），比如：腿迈得再大一点", "What to change (optional), e.g. longer steps");
       note.value = notes.get(s.id) || "";
       note.disabled = r.status === "run";
       note.oninput = () => notes.set(s.id, note.value);
@@ -315,7 +348,7 @@ function renderCards() {
     }
     if (!s.mirrorOf) {
       const btn = document.createElement("button"); btn.className = "btn"; btn.type = "button";
-      btn.textContent = r.status === "idle" ? "只生成这一行" : "重新生成";
+      btn.textContent = r.status === "idle" ? t("只生成这一行", "Generate this row") : t("重新生成", "Generate again");
       btn.disabled = r.status === "run" || !st.baseB64;
       btn.onclick = () => genRow(s).then(afterRows);
       card.append(btn);
@@ -339,7 +372,7 @@ const depsOf = (s) => (s.look ? ["look-cardinals"] : []);
 async function applySheet(s, raw, save = true) {
   const out = await HATCH.processSheet(raw, s);
   st.rows[s.id] = { status: out.ok && !out.warnings.length ? "ok" : out.ok ? "warn" : "bad", frames: out.frames, cells: out.cells, warnings: out.warnings, raw,
-    error: out.ok ? "" : "帧数不够：" + out.warnings.join("；") };
+    error: out.ok ? "" : t("帧数不够：", "Not enough frames: ") + out.warnings.join(t("；", "; ")) };
   for (const m of S.filter((x) => x.mirrorOf === s.id))
     st.rows[m.id] = { status: st.rows[s.id].status === "bad" ? "bad" : "ok", frames: out.frames, cells: HATCH.mirrorCells(out.cells), warnings: [], error: st.rows[s.id].error };
   if (save) { saveImage("row-" + s.id, raw); saveMeta(); }
@@ -353,7 +386,7 @@ const permanent = (e) => /^HTTP 4(0[0-4]|1\d|2[0-8])/.test(String(e));
 async function genRow(s, attempt = 1) {
   const missing = depsOf(s).filter((d) => !ready(d));
   if (missing.length) {
-    st.rows[s.id] = { status: "bad", error: "需要先生成：" + missing.map((d) => S.find((x) => x.id === d).label).join("、") };
+    st.rows[s.id] = { status: "bad", error: t("需要先生成：", "Generate these first: ") + missing.map((d) => S.find((x) => x.id === d).label).join(t("、", ", ")) };
     renderCards();
     return;
   }
@@ -387,7 +420,7 @@ async function genAll() {
   const queue = plannedStates().filter((s) => !ready(s.id));
   const total = queue.length;
   let done = 0;
-  const tick = () => setStatus($("rowsStatus"), `进度 ${done}/${total}`);
+  const tick = () => setStatus($("rowsStatus"), t(`进度 ${done}/${total}`, `Progress ${done}/${total}`));
   tick();
   const running = new Set();
   // Take the next row whose dependencies are done (or can no longer finish).
@@ -414,11 +447,11 @@ $("genAll").addEventListener("click", genAll);
 function afterRows() {
   const bad = S.filter((s) => wanted(s, $("withLook").checked) && !ready(s.id));
   if (bad.length) {
-    setStatus($("rowsStatus"), `还差：${bad.map((s) => s.label).join("、")}`, bad.some((s) => st.rows[s.id]?.status === "bad") ? "bad" : "");
+    setStatus($("rowsStatus"), t("还差：", "Still missing: ") + bad.map((s) => s.label).join(t("、", ", ")), bad.some((s) => st.rows[s.id]?.status === "bad") ? "bad" : "");
     $("finalArea").hidden = true;
     return false;
   }
-  setStatus($("rowsStatus"), "全部动作完成", "ok");
+  setStatus($("rowsStatus"), t("全部动作完成", "All animations done"), "ok");
   buildFinal();
   return true;
 }
@@ -462,13 +495,15 @@ async function install() {
       hdPng: st.hdB64,
       coquouJson: JSON.stringify({ format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model } }, null, 2),
     });
-    setStatus(el, `${done.replaced ? "已更新" : "已安装"}「${done.displayName}」，桌宠已经换成 TA 了。`, "ok");
+    setStatus(el, done.replaced
+      ? t(`已更新「${done.displayName}」，桌宠已经换成 TA 了。`, `Updated ${done.displayName}; they're on your desktop now.`)
+      : t(`已安装「${done.displayName}」，桌宠已经换成 TA 了。`, `Installed ${done.displayName}; they're on your desktop now.`), "ok");
     window.coquouHatchPending?.(false);
     if (persist) invoke("hatch_clear").catch(() => {});
     console.info("installed", done.key);
     return done;
   } catch (e) {
-    setStatus(el, "安装失败：" + e, "bad");
+    setStatus(el, t("安装失败：", "Install failed: ") + e, "bad");
     console.error("install failed", String(e));
     return null;
   }
@@ -487,7 +522,27 @@ setInterval(() => {
   }
 }, 140);
 
+// ---------- language ----------
+// Redraw what this page wrote after a language change (app.js `relabel`).
+// Status lines already shown keep the language they were written in.
+window.hatchRelabel = () => {
+  renderKeyHint();
+  renderProfileList($("profile").value);
+  renderKeyPlaceholder(currentProfile());
+  showForm(editing);
+  if (!st.refB64) renderDropHint();
+  else showReference();
+  if ($("baseArea").classList.contains("empty")) renderBaseHint();
+  renderGenBase();
+  updateEstimate();
+  renderCards();
+};
+
 // ---------- start ----------
+renderKeyHint();
+renderDropHint();
+renderBaseHint();
+renderGenBase();
 updateEstimate();
 loadProfiles().then(() => (window.__COQUOU_SELFTEST__ ? selftest() : offerResume()));
 

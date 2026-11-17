@@ -70,23 +70,29 @@ fn set<R: Runtime>(app: &AppHandle<R>, change: impl FnOnce(&mut Status)) {
     let _ = app.emit_to(crate::windows::APP, "update-status", status(app));
 }
 
-/// Updater errors in plain Chinese (the raw text goes to the log).
+/// Updater errors in plain words (the raw text goes to the log).
 fn friendly(raw: &str) -> String {
     let e = raw.to_lowercase();
     let msg = if e.contains("signature") {
-        "更新包的签名校验没通过，为安全起见没有安装。请稍后再试，或到发布页手动下载。"
+        tr!(
+            "更新包的签名校验没通过，为安全起见没有安装。请稍后再试，或到发布页手动下载。",
+            "The update's signature did not verify, so it was not installed. Try again later, or download it from the releases page."
+        )
     } else if e.contains("platform") && (e.contains("not found") || e.contains("missing")) {
-        "这次发布还没有适合你电脑的安装包，请过一阵再检查。"
+        tr!("这次发布还没有适合你电脑的安装包，请过一阵再检查。", "This release has no package for your computer yet. Check again later.")
     } else if e.contains("timed out") || e.contains("timeout") {
-        "连接 GitHub 超时了，请检查网络后再试。"
+        tr!("连接 GitHub 超时了，请检查网络后再试。", "GitHub timed out. Check your network and try again.")
     } else if e.contains("dns") || e.contains("connect") || e.contains("network") || e.contains("error sending request") || e.contains("tls") {
-        "连不上更新服务器（GitHub），请检查网络或代理后再试。"
+        tr!("连不上更新服务器（GitHub），请检查网络或代理后再试。", "Cannot reach the update server (GitHub). Check your network or proxy and try again.")
     } else if e.contains("404") || e.contains("not found") {
-        "还没有找到发布的版本信息。"
+        tr!("还没有找到发布的版本信息。", "No release information was found yet.")
     } else if e.contains("permission") || e.contains("denied") || e.contains("read-only") {
-        "没有权限替换应用文件。请把 Coquou 移到「应用程序」文件夹后再试。"
+        tr!(
+            "没有权限替换应用文件。请把 Coquou 移到「应用程序」文件夹后再试。",
+            "No permission to replace the app's files. Move Coquou to the Applications folder and try again."
+        )
     } else {
-        "检查或安装更新时出了点问题，请稍后再试。"
+        tr!("检查或安装更新时出了点问题，请稍后再试。", "Something went wrong while checking for or installing the update. Try again later.")
     };
     msg.to_string()
 }
@@ -197,7 +203,7 @@ pub async fn update_check(app: AppHandle) -> Result<Status, String> {
 #[tauri::command]
 pub async fn update_install(app: AppHandle) -> Result<(), String> {
     let update = lock(&app.state::<UpdateState>().pending).clone();
-    let Some(update) = update else { return Err("没有可安装的更新，请先检查更新".into()) };
+    let Some(update) = update else { return Err(tr!("没有可安装的更新，请先检查更新", "No update to install. Check for updates first.").into()) };
     set(&app, |s| {
         s.installing = true;
         s.last_error = None;

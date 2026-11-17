@@ -135,7 +135,7 @@ impl CustomPatch {
     fn check(&self) -> Result<(), String> {
         if let Some(name) = &self.name {
             if name.trim().chars().count() > MAX_NAME_CHARS || name.chars().any(char::is_control) {
-                return Err(format!("名字最多 {MAX_NAME_CHARS} 个字"));
+                return Err(tr!(format!("名字最多 {MAX_NAME_CHARS} 个字"), format!("Names can have at most {MAX_NAME_CHARS} characters")));
             }
         }
         if let Some(lines) = &self.lines {

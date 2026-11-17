@@ -12,8 +12,12 @@
 //!   screens / system  displays; fullscreen + battery detection per OS
 //!   update    self-update;  migrate  data from the app's former names
 //!   fsutil    atomic writes and safe JSON reads;  sync  locking shared state
+//!   i18n      interface language (`tr!`) for menus and messages
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+// First: the other modules use its `tr!` macro.
+#[macro_use]
+mod i18n;
 mod ai;
 mod fsutil;
 mod hatch_run;
@@ -101,6 +105,11 @@ fn on_window_event(window: &tauri::Window, event: &WindowEvent) {
 }
 
 fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    migrate::run(app.handle());
+    install::sweep(app.handle());
+    // Before any menu: settings choose the interface language.
+    settings::init(app.handle());
+
     // No Dock icon on macOS: the pet lives in the menu-bar tray only.
     #[cfg(target_os = "macos")]
     {
@@ -110,10 +119,6 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     // One handler for both the tray menu and the macOS app menu (a
     // tray-specific handler would fire in addition to this one).
     app.on_menu_event(|app, event| tray::on_menu(app, event.id.as_ref()));
-
-    migrate::run(app.handle());
-    install::sweep(app.handle());
-    settings::init(app.handle());
 
     let window = app.get_webview_window(overlay::LABEL).expect("overlay window from tauri.conf.json");
     screens::ensure_placement(&window);

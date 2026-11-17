@@ -151,10 +151,10 @@ const MAX_DROPPED_IMAGE: u64 = 40 * 1024 * 1024;
 
 #[tauri::command(async)]
 pub fn read_dropped(dropped: State<Dropped>, path: String) -> Result<tauri::ipc::Response, String> {
-    let file = lock(&dropped.0).iter().find(|p| p.display().to_string() == path).cloned().ok_or("不是刚拖进来的文件")?;
+    let file = lock(&dropped.0).iter().find(|p| p.display().to_string() == path).cloned().ok_or(tr!("不是刚拖进来的文件", "Not one of the files just dropped"))?;
     let meta = std::fs::metadata(&file).map_err(|e| e.to_string())?;
     if !meta.is_file() || meta.len() > MAX_DROPPED_IMAGE {
-        return Err("图片太大或不是文件".into());
+        return Err(tr!("图片太大或不是文件", "The image is too large or not a file").into());
     }
     std::fs::read(&file).map(tauri::ipc::Response::new).map_err(|e| e.to_string())
 }
@@ -180,14 +180,14 @@ pub fn reveal_pet(app: AppHandle, key: String) -> Result<(), String> {
 #[tauri::command(async)]
 pub fn delete_pet(app: AppHandle, key: String) -> Result<(), String> {
     if !key.starts_with("coquou:") {
-        return Err("只能删除安装到 Coquou 的宠物".into());
+        return Err(tr!("只能删除安装到 Coquou 的宠物", "Only pets installed in Coquou can be deleted").into());
     }
     let dir = crate::pets::pet_dir(&app, &key)?;
-    let root = crate::pets::coquou_root(&app).and_then(|r| r.canonicalize().ok()).ok_or("找不到宠物文件夹")?;
+    let root = crate::pets::coquou_root(&app).and_then(|r| r.canonicalize().ok()).ok_or(tr!("找不到宠物文件夹", "Cannot find the pets folder"))?;
     if dir.parent() != Some(root.as_path()) {
-        return Err("宠物路径不对".into());
+        return Err(tr!("宠物路径不对", "Wrong pet path").into());
     }
-    std::fs::remove_dir_all(&dir).map_err(|e| format!("删除失败：{e}"))?;
+    std::fs::remove_dir_all(&dir).map_err(|e| tr!(format!("删除失败：{e}"), format!("Could not delete: {e}")))?;
     log::info!("deleted {key}");
     crate::prefs::forget_pet(&app, &key);
     let _ = app.emit("pets-changed", serde_json::json!({ "removed": key }));

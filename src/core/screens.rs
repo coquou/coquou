@@ -8,9 +8,10 @@
 
 use tauri::{Manager, Monitor, PhysicalPosition, PhysicalSize, Runtime, WebviewWindow};
 
-/// Stable-ish identities: the OS display name, or "显示器 N" when unnamed;
-/// identical names (two monitors of one model) get " #N" so each display
-/// stays selectable.
+/// Stable-ish identities: the OS display name, or "显示器 N" when unnamed
+/// (saved in settings.json, so not translated; `list` labels it per
+/// language); identical names (two monitors of one model) get " #N" so each
+/// display stays selectable.
 fn keys(monitors: &[Monitor]) -> Vec<String> {
     let names: Vec<String> = monitors
         .iter()
@@ -36,10 +37,16 @@ pub fn list<R: Runtime>(window: &WebviewWindow<R>) -> Vec<(String, String, Monit
     monitors
         .into_iter()
         .zip(keys)
-        .map(|(m, k)| {
+        .enumerate()
+        .map(|(i, (m, k))| {
             let main = primary.as_ref().is_some_and(|p| same(p, &m));
             let size = m.size();
-            let label = format!("{k}（{}×{}{}）", size.width, size.height, if main { "，主显示器" } else { "" });
+            let (w, h) = (size.width, size.height);
+            let name = if m.name().is_some() { k.clone() } else { tr!(k.clone(), format!("Display {}", i + 1)) };
+            let label = match main {
+                true => tr!(format!("{name}（{w}×{h}，主显示器）"), format!("{name} ({w}×{h}, main)")),
+                false => tr!(format!("{name}（{w}×{h}）"), format!("{name} ({w}×{h})")),
+            };
             (k, label, m)
         })
         .collect()

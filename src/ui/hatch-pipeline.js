@@ -10,6 +10,7 @@ const HATCH = (() => {
   const [CELL_W, CELL_H] = window.Coquou.CELL;
   const { COLS } = window.Coquou;
   const ROWS = 11;
+  const { t } = window.Coquou;
   const TARGET_H = 150;   // idle body height inside a 208 px cell (room for raised arms)
   const FOOT_PAD = 10;    // ground line distance from the cell bottom
 
@@ -33,21 +34,22 @@ const HATCH = (() => {
   // stand four-legged animals up on their hind legs.
   const BODY_PLAN = "Keep the character's body plan and natural stance: a four-legged animal stays on all four legs, a two-legged character stands; never stand an animal up on its hind legs unless the reference or notes show it that way.";
 
-  // Codex v2 rows. `mirrorOf` rows are derived, not generated.
+  // Codex v2 rows. `mirrorOf` rows are derived, not generated. `label` is
+  // the name shown on the hatch page, in the current interface language.
   const STATES = [
-    { id: "idle", label: "待机", row: 0, frames: 6, action: "a calm idle loop: gentle breathing and one blink, staying in place in its natural stance, facing the viewer" },
-    { id: "running-right", label: "向右走", row: 1, frames: 8, action: "walking to the RIGHT side of the picture (viewer's right), side or three-quarter view facing right, a clear alternating step cycle" },
-    { id: "running-left", label: "向左走", row: 2, frames: 8, mirrorOf: "running-right" },
-    { id: "waving", label: "挥手", row: 3, frames: 4, action: "a friendly greeting wave with one hand or paw: start, raise, wave, lower" },
-    { id: "jumping", label: "跳", row: 4, frames: 5, action: "a happy jump: crouch, take off, peak high in the air, come down, land and settle. Keep the same ground line; at the peak the feet are clearly above it" },
-    { id: "failed", label: "失败", row: 5, frames: 8, action: "a sad, deflated reaction to an error: droops and slumps, small sigh, then recovers a little. No tears or effects flying off the body" },
-    { id: "waiting", label: "等待", row: 6, frames: 6, action: "expectantly waiting, looking up at the viewer as if asking for attention, slight sway" },
-    { id: "running", label: "干活中", row: 7, frames: 6, action: "busy working on a task (not literal running): typing, tinkering or thinking hard, an energetic loop" },
-    { id: "review", label: "检查中", row: 8, frames: 6, action: "focused inspection: looking closely at something, e.g. with a magnifying glass or reading a page, small nods" },
+    { id: "idle", get label() { return t("待机", "Idle"); }, row: 0, frames: 6, action: "a calm idle loop: gentle breathing and one blink, staying in place in its natural stance, facing the viewer" },
+    { id: "running-right", get label() { return t("向右走", "Walk right"); }, row: 1, frames: 8, action: "walking to the RIGHT side of the picture (viewer's right), side or three-quarter view facing right, a clear alternating step cycle" },
+    { id: "running-left", get label() { return t("向左走", "Walk left"); }, row: 2, frames: 8, mirrorOf: "running-right" },
+    { id: "waving", get label() { return t("挥手", "Wave"); }, row: 3, frames: 4, action: "a friendly greeting wave with one hand or paw: start, raise, wave, lower" },
+    { id: "jumping", get label() { return t("跳", "Jump"); }, row: 4, frames: 5, action: "a happy jump: crouch, take off, peak high in the air, come down, land and settle. Keep the same ground line; at the peak the feet are clearly above it" },
+    { id: "failed", get label() { return t("失败", "Sad"); }, row: 5, frames: 8, action: "a sad, deflated reaction to an error: droops and slumps, small sigh, then recovers a little. No tears or effects flying off the body" },
+    { id: "waiting", get label() { return t("等待", "Waiting"); }, row: 6, frames: 6, action: "expectantly waiting, looking up at the viewer as if asking for attention, slight sway" },
+    { id: "running", get label() { return t("干活中", "Working"); }, row: 7, frames: 6, action: "busy working on a task (not literal running): typing, tinkering or thinking hard, an energetic loop" },
+    { id: "review", get label() { return t("检查中", "Reviewing"); }, row: 8, frames: 6, action: "focused inspection: looking closely at something, e.g. with a magnifying glass or reading a page, small nods" },
     // Not in the atlas: four exaggerated cardinal gazes that ground the 16 directions.
-    { id: "look-cardinals", label: "看向锚点（上右下左）", row: null, frames: 4, cardinal: true },
-    { id: "look-a", label: "看向 0°–157.5°", row: 9, frames: 8, look: LOOK_A },
-    { id: "look-b", label: "看向 180°–337.5°", row: 10, frames: 8, look: LOOK_B },
+    { id: "look-cardinals", get label() { return t("看向锚点（上右下左）", "Look anchors (up, right, down, left)"); }, row: null, frames: 4, cardinal: true },
+    { id: "look-a", get label() { return t("看向 0°–157.5°", "Look 0°–157.5°"); }, row: 9, frames: 8, look: LOOK_A },
+    { id: "look-b", get label() { return t("看向 180°–337.5°", "Look 180°–337.5°"); }, row: 10, frames: 8, look: LOOK_B },
   ];
 
   const STYLES = {
@@ -286,17 +288,17 @@ const HATCH = (() => {
     const frames = [];
     for (let i = 0; i < cols * rows; i++) {
       const cell = cells[i];
-      if (i >= n) { if (cell.main) warnings.push(`多出了第 ${i + 1} 个姿势，已忽略`); continue; }
-      if (!cell.main) { warnings.push(`第 ${i + 1} 帧是空的`); frames.push(null); continue; }
+      if (i >= n) { if (cell.main) warnings.push(t(`多出了第 ${i + 1} 个姿势，已忽略`, `Extra pose ${i + 1} ignored`)); continue; }
+      if (!cell.main) { warnings.push(t(`第 ${i + 1} 帧是空的`, `Frame ${i + 1} is empty`)); frames.push(null); continue; }
       const parts = cell.comps;
       const box = parts.reduce((b, c) => ({
         minX: Math.min(b.minX, c.minX), minY: Math.min(b.minY, c.minY),
         maxX: Math.max(b.maxX, c.maxX), maxY: Math.max(b.maxY, c.maxY),
       }), { minX: w, minY: h, maxX: 0, maxY: 0 });
       const cx0 = (i % cols) * cw, cy0 = Math.floor(i / cols) * ch;
-      if (box.minX <= 1 || box.minY <= 1 || box.maxX >= w - 2 || box.maxY >= h - 2) warnings.push(`第 ${i + 1} 帧碰到了图片边缘，可能被裁掉`);
+      if (box.minX <= 1 || box.minY <= 1 || box.maxX >= w - 2 || box.maxY >= h - 2) warnings.push(t(`第 ${i + 1} 帧碰到了图片边缘，可能被裁掉`, `Frame ${i + 1} touches the image edge and may be cut off`));
       const spill = Math.max(cx0 - box.minX, box.maxX - (cx0 + cw), cy0 - box.minY, box.maxY - (cy0 + ch));
-      if (spill > Math.min(cw, ch) * 0.08) warnings.push(`第 ${i + 1} 帧越出了自己的格子`);
+      if (spill > Math.min(cw, ch) * 0.08) warnings.push(t(`第 ${i + 1} 帧越出了自己的格子`, `Frame ${i + 1} spills out of its cell`));
       // Cut the frame out (only its own components).
       const fw = box.maxX - box.minX + 1, fh = box.maxY - box.minY + 1;
       const ids = new Set(parts.map((c) => c.id));
@@ -382,7 +384,7 @@ const HATCH = (() => {
     const img = pixels(await decode(b64));
     const bg = estimateBackground(img);
     const warnings = [];
-    if (!bg.transparent && bg.kind === "other") warnings.push("背景不是纯色抠像底，抠图可能不干净");
+    if (!bg.transparent && bg.kind === "other") warnings.push(t("背景不是纯色抠像底，抠图可能不干净", "The background isn't a flat key colour, so the cut-out may be rough"));
     matte(img, bg);
     const split = splitSheet(img, state.frames, layoutFor(state.frames));
     warnings.push(...split.warnings);

@@ -1,6 +1,6 @@
-// Shared by both windows (loaded first): logging, platform, constants and
-// reading pets (Codex atlas layout + the coquou.json extension).
-// Exposed as `window.Coquou`.
+// Shared by both windows (loaded first): logging, interface language,
+// platform, constants and reading pets (Codex atlas layout + the coquou.json
+// extension). Exposed as `window.Coquou`.
 (() => {
   const { invoke } = window.__TAURI__.core;
 
@@ -18,19 +18,67 @@
     window.addEventListener("unhandledrejection", (e) => send("error", `unhandled: ${fmt(e.reason)}`));
   }
 
+  // ---------- interface language ----------
+  // Chinese is the source text and English sits next to it: `t("中文",
+  // "English")` in scripts; in HTML, `data-en` replaces an element's own
+  // text (its first direct text node, so icons and child elements stay) and
+  // `data-en-placeholder` / `-title` / `-aria-label` replace attributes.
+  // Text a script sets is the script's to redraw after `setLang`.
+  // The language is resolved in Rust (i18n.rs, `get_settings().lang`); the
+  // app window gets it injected as `__COQUOU_LANG__` before the first paint.
+  let lang = window.__COQUOU_LANG__ === "en" ? "en" : "zh";
+  const t = (zh, en) => (lang === "en" ? en : zh);
+  const ATTRS = ["placeholder", "title", "aria-label"];
+  const ownText = (e) => [...e.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.data.trim());
+  function translatePage() {
+    document.documentElement.lang = t("zh-CN", "en");
+    for (const e of document.querySelectorAll("[data-en]")) {
+      const node = ownText(e);
+      if (!node) continue;
+      e.dataset.zh ??= node.data.trim();
+      node.data = t(e.dataset.zh, e.dataset.en);
+    }
+    for (const a of ATTRS) {
+      for (const e of document.querySelectorAll(`[data-en-${a}]`)) {
+        e.setAttribute(`data-zh-${a}`, e.getAttribute(`data-zh-${a}`) ?? e.getAttribute(a) ?? "");
+        e.setAttribute(a, t(e.getAttribute(`data-zh-${a}`), e.getAttribute(`data-en-${a}`)));
+      }
+    }
+  }
+  // Switch to "zh" / "en"; true when it changed (the caller redraws).
+  function setLang(next) {
+    next = next === "en" ? "en" : "zh";
+    if (next === lang) return false;
+    lang = next;
+    translatePage();
+    return true;
+  }
+  translatePage();
+
   // ---------- platform & names ----------
   const ua = navigator.userAgent;
   const platform = /Mac/.test(ua) ? "macos" : /Windows/.test(ua) ? "windows" : "linux";
-  const keystore = platform === "windows" ? "凭据管理器" : "钥匙串";
+  const keystore = () => (platform === "windows" ? t("凭据管理器", "Credential Manager") : t("钥匙串", "Keychain"));
   // Speech lines for pets without their own (doc/pet-format.md `lines`).
   const DEFAULT_LINES = {
-    hello: ["来啦～", "新的一天，一起加油！"],
-    click: ["干嘛呀～", "嘿嘿", "被发现了！"],
-    pet: ["好舒服～", "再摸摸嘛", "嘿嘿嘿"],
-    wake: ["唔……谁吵我", "我没睡着！"],
-    held: ["哇！放我下来！", "好高呀"],
-    idle: ["休息一下眼睛吧", "记得喝水哦", "我就在这儿陪你"],
+    zh: {
+      hello: ["来啦～", "新的一天，一起加油！"],
+      click: ["干嘛呀～", "嘿嘿", "被发现了！"],
+      pet: ["好舒服～", "再摸摸嘛", "嘿嘿嘿"],
+      wake: ["唔……谁吵我", "我没睡着！"],
+      held: ["哇！放我下来！", "好高呀"],
+      idle: ["休息一下眼睛吧", "记得喝水哦", "我就在这儿陪你"],
+    },
+    en: {
+      hello: ["I'm here!", "New day, let's do this!"],
+      click: ["What's up?", "Hehe", "You found me!"],
+      pet: ["That's nice~", "More, please", "Hehehe"],
+      wake: ["Mmh… who's there?", "I wasn't sleeping!"],
+      held: ["Whoa! Put me down!", "So high up!"],
+      idle: ["Rest your eyes a little", "Remember to drink water", "I'm right here with you"],
+    },
   };
+  const defaultLines = (kind) => DEFAULT_LINES[lang][kind];
 
   // ---------- Codex atlas ----------
   // doc/pet-format.md: 8 columns of 192×208 cells; v1 has 9 rows, v2 11
@@ -88,7 +136,7 @@
   }
 
   window.Coquou = {
-    mirrorConsole, platform, keystore, DEFAULT_LINES,
+    mirrorConsole, t, setLang, platform, keystore, defaultLines,
     CELL, COLS, ROWS, LOOK_ROWS, petImage, loadAtlas,
   };
 })();

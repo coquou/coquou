@@ -1,4 +1,5 @@
-/* Coquou app window. Light / dark follow the system. */
+/* Coquou app window. Light / dark follow `prefers-color-scheme`, which the
+   webview takes from the app theme (settings.rs: system, light or dark). */
 :root {
   color-scheme: light dark;
   --bg: #f7f5f2;

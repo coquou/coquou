@@ -50,7 +50,8 @@ src/
     tray.rs              托盘菜单（也处理 macOS 应用菜单的动作）
     windows.rs           主窗口、macOS 应用菜单、打开文件夹和链接
     prefs.rs             宠物偏好（宠物、大小、活动范围、活跃程度、睡觉、说话、首次启动）
-    settings.rs          应用设置与 settings.json 读写
+    settings.rs          应用设置（外观、语言等）与 settings.json 读写
+    i18n.rs              界面语言：菜单和返回给界面的提示（tr! 宏）
     pets.rs              宠物发现（list_pets）与限定在宠物目录内的文件读取（read_pet_file）
     install.rs           .pet / .zip / 目录的校验、安装、导出
     library.rs           宠物库命令：安装、导入、拖放、导出、删除
@@ -64,7 +65,7 @@ src/
     sync.rs              共享状态加锁
     build.rs             构建脚本；capabilities/ 是窗口权限
   ui/                    前端（纯静态文件）
-    common.js            两个窗口共用：日志、平台、Codex 图集常量与读取宠物
+    common.js            两个窗口共用：日志、界面语言（t / data-en）、平台、Codex 图集常量与读取宠物
     index.html / main.js 桌宠窗口：状态机、物理、命中检测、台词气泡、通用反应（拎起摇摆、落地压扁）
     sprite.js            Codex 图集 + coquou.json 渲染器（所有宠物都走它）
     app.html / app.css / app.js   主窗口
@@ -96,6 +97,13 @@ target/ / gen/           编译输出（不进仓库）
 - 「桌面上正在显示哪只宠物」是运行时状态（`report_current_pet`）：记住的宠物不存在时，桌宠会临时换一只，但不改掉用户的选择。
 - 换宠物要先加载素材，所以走桌宠窗口：主窗口发 `pet-command`（`pet:<key>`），托盘菜单发 `reset`、`sleep`。
 - 右键宠物弹出托盘菜单，但不含「退出」（`show_pet_menu`，只接受桌宠窗口调用），点击结果同样走 `tray::on_menu`。
+
+### 外观与语言
+
+- 外观（`theme`：`system` / `light` / `dark`）用 Tauri 的 `AppHandle::set_theme` 设置整个应用的外观，网页的 `prefers-color-scheme` 随之变化，所以 `app.css` 仍只按媒体查询写一套深色变量，标题栏和原生菜单也一起切换。
+- 语言（`language`：`system` / `zh` / `en`）在 Rust 里解析（`i18n.rs`，跟随系统时 zh 开头的系统语言用中文，其余用英文），`get_settings` 返回解析后的 `lang`。中文是源文本，英文写在旁边：Rust 用 `tr!("中文", "English")`，脚本用 `t("中文", "English")`，`app.html` 的静态文字用 `data-en`（属性用 `data-en-placeholder` / `-title` / `-aria-label`）。
+- 切换语言时 Rust 重建托盘和 macOS 应用菜单，并向两个窗口发 `settings-changed`；主窗口重新读设置、`setLang` 后重画脚本写的文字（`relabel`、`hatchRelabel`），桌宠窗口只用它来决定气泡提示和通用台词的语言。主窗口新建时会注入 `__COQUOU_LANG__`，首屏就是正确的语言。
+- 新增界面文字时两种语言都要写；已经显示出来的状态提示保持原来的语言，不追改。
 
 ### 系统适配
 

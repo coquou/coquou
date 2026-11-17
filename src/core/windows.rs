@@ -31,6 +31,8 @@ fn open_app_with<R: Runtime>(app: &AppHandle<R>, page: Option<&str>, init: Optio
     if let Some(p) = page {
         b = b.initialization_script(format!("window.__COQUOU_PAGE__ = {};", serde_json::json!(p)));
     }
+    // So the page's first paint is already in the right language (common.js).
+    b = b.initialization_script(format!("window.__COQUOU_LANG__ = {};", serde_json::json!(crate::i18n::code())));
     if let Some(js) = init {
         b = b.initialization_script(js);
     }
@@ -94,7 +96,7 @@ pub async fn open_window(app: AppHandle, name: String) -> Result<(), String> {
     match name.as_str() {
         "app" => open_app(&app, None),
         "pets-dir" => {
-            let dir = crate::pets::coquou_root(&app).ok_or("找不到宠物文件夹")?;
+            let dir = crate::pets::coquou_root(&app).ok_or(tr!("找不到宠物文件夹", "Cannot find the pets folder"))?;
             std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
             open_path(&dir);
         }
@@ -143,35 +145,36 @@ pub fn open_link(which: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Chinese app menu bar (shown while the app window makes Coquou a regular
-/// app). The Edit menu keeps ⌘C / ⌘V working in text fields.
+/// The app menu bar in the interface language (shown while the app window
+/// makes Coquou a regular app). The Edit menu keeps ⌘C / ⌘V working in text
+/// fields.
 #[cfg(target_os = "macos")]
 pub fn app_menu<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<tauri::menu::Menu<R>> {
     use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
     let sep = || PredefinedMenuItem::separator(app);
     let coquou = Submenu::with_items(app, "Coquou", true, &[
-        &MenuItem::with_id(app, "menu-about", "关于 Coquou", true, None::<&str>)?,
+        &MenuItem::with_id(app, "menu-about", tr!("关于 Coquou", "About Coquou"), true, None::<&str>)?,
         &sep()?,
-        &MenuItem::with_id(app, "menu-settings", "设置…", true, Some("CmdOrCtrl+,"))?,
+        &MenuItem::with_id(app, "menu-settings", tr!("设置…", "Settings…"), true, Some("CmdOrCtrl+,"))?,
         &sep()?,
-        &PredefinedMenuItem::hide(app, Some("隐藏 Coquou"))?,
-        &PredefinedMenuItem::hide_others(app, Some("隐藏其他"))?,
-        &PredefinedMenuItem::show_all(app, Some("全部显示"))?,
+        &PredefinedMenuItem::hide(app, Some(tr!("隐藏 Coquou", "Hide Coquou")))?,
+        &PredefinedMenuItem::hide_others(app, Some(tr!("隐藏其他", "Hide Others")))?,
+        &PredefinedMenuItem::show_all(app, Some(tr!("全部显示", "Show All")))?,
         &sep()?,
-        &PredefinedMenuItem::quit(app, Some("退出"))?,
+        &PredefinedMenuItem::quit(app, Some(tr!("退出 Coquou", "Quit Coquou")))?,
     ])?;
-    let edit = Submenu::with_items(app, "编辑", true, &[
-        &PredefinedMenuItem::undo(app, Some("撤销"))?,
-        &PredefinedMenuItem::redo(app, Some("重做"))?,
+    let edit = Submenu::with_items(app, tr!("编辑", "Edit"), true, &[
+        &PredefinedMenuItem::undo(app, Some(tr!("撤销", "Undo")))?,
+        &PredefinedMenuItem::redo(app, Some(tr!("重做", "Redo")))?,
         &sep()?,
-        &PredefinedMenuItem::cut(app, Some("剪切"))?,
-        &PredefinedMenuItem::copy(app, Some("拷贝"))?,
-        &PredefinedMenuItem::paste(app, Some("粘贴"))?,
-        &PredefinedMenuItem::select_all(app, Some("全选"))?,
+        &PredefinedMenuItem::cut(app, Some(tr!("剪切", "Cut")))?,
+        &PredefinedMenuItem::copy(app, Some(tr!("拷贝", "Copy")))?,
+        &PredefinedMenuItem::paste(app, Some(tr!("粘贴", "Paste")))?,
+        &PredefinedMenuItem::select_all(app, Some(tr!("全选", "Select All")))?,
     ])?;
-    let window = Submenu::with_items(app, "窗口", true, &[
-        &PredefinedMenuItem::minimize(app, Some("最小化"))?,
-        &PredefinedMenuItem::close_window(app, Some("关闭窗口"))?,
+    let window = Submenu::with_items(app, tr!("窗口", "Window"), true, &[
+        &PredefinedMenuItem::minimize(app, Some(tr!("最小化", "Minimize")))?,
+        &PredefinedMenuItem::close_window(app, Some(tr!("关闭窗口", "Close Window")))?,
     ])?;
     Menu::with_items(app, &[&coquou, &edit, &window])
 }

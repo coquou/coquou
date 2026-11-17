@@ -8,7 +8,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
-const { DEFAULT_LINES, platform } = window.Coquou;
+const { defaultLines, platform, t } = window.Coquou;
 window.Coquou.mirrorConsole("overlay");
 
 const stage = document.getElementById("stage");
@@ -208,10 +208,31 @@ function chat(kind, force = false) {
   if (bubble || bubbleQueue.length) return;
   if (!force && clock - lastChat < CHAT_GAP) return;
   // The user's lines (prefs `custom`), else the pet's own (coquou.json), else the defaults.
-  const pool = prefs.custom?.[petKey]?.lines?.[kind] ?? renderer.lines?.[kind] ?? DEFAULT_LINES[kind];
+  const pool = prefs.custom?.[petKey]?.lines?.[kind] ?? renderer.lines?.[kind] ?? defaultLines(kind);
   if (!pool?.length) return;
   lastChat = clock;
   bubble = { text: pool[Math.floor(Math.random() * pool.length)], until: clock + 3.2 };
+}
+
+// Greedy line breaking: between any two CJK characters, and at spaces
+// elsewhere (a word wider than a whole line is split anywhere).
+const CJK = "\u2e80-\u9fff\uf900-\ufaff\uff00-\uffef";
+const TOKENS = new RegExp(`[${CJK}][，。！？、：；）」』～…]*|[^\\s${CJK}]+\\s*|\\s+`, "g");
+function wrap(text, maxW) {
+  const lines = [];
+  let line = "";
+  const fits = (s) => ctx.measureText(s.trimEnd()).width <= maxW;
+  for (const token of text.match(TOKENS) || []) {
+    if (fits(line + token)) { line += token; continue; }
+    if (line.trim()) lines.push(line.trimEnd());
+    line = "";
+    for (const ch of token.trimStart()) {
+      if (!fits(line + ch)) { lines.push(line); line = ""; }
+      line += ch;
+    }
+  }
+  lines.push(line.trimEnd());
+  return lines;
 }
 
 function drawBubble() {
@@ -223,12 +244,7 @@ function drawBubble() {
   if (!bubble) return;
   const maxW = 240, pad = 9, lineH = 18;
   ctx.font = `13px -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif`;
-  const lines = [];
-  let line = "";
-  for (const ch of bubble.text) {
-    if (ctx.measureText(line + ch).width > maxW) { lines.push(line); line = ch; } else line += ch;
-  }
-  lines.push(line);
+  const lines = wrap(bubble.text, maxW);
   const w = Math.max(...lines.map((l) => ctx.measureText(l).width)) + pad * 2;
   const h = lines.length * lineH + pad * 2 - 4;
   const x = Math.min(Math.max(pet.x - w / 2, 6), W - w - 6);
@@ -320,14 +336,14 @@ listen("pet-installed", async ({ payload }) => {
   touch(clock);
   if (await usePet(payload.key)) {
     hearts(5);
-    say(`${payload.replaced ? "更新" : "安装"}好了：${payload.displayName}`, 3);
+    say(payload.replaced ? t(`更新好了：${payload.displayName}`, `Updated: ${payload.displayName}`) : t(`安装好了：${payload.displayName}`, `Installed: ${payload.displayName}`), 3);
   }
 });
 listen("pet-install-failed", ({ payload }) => {
-  say(`装不上${payload.file ? " " + payload.file : ""}：${payload.error}`, 5);
+  say(t(`装不上${payload.file ? " " + payload.file : ""}：`, `Cannot install${payload.file ? " " + payload.file : ""}: `) + payload.error, 5);
 });
 listen("update-available", ({ payload }) => {
-  say(`Coquou 有新版本 ${payload.version} 啦，点托盘图标就能更新`, 6);
+  say(t(`Coquou 有新版本 ${payload.version} 啦，点托盘图标就能更新`, `Coquou ${payload.version} is out! Update from the tray icon`), 6);
 });
 // A pet was deleted in the app window: if it was ours, pick another.
 listen("pets-changed", async ({ payload }) => {
@@ -542,12 +558,17 @@ function defaultPets(pets, except) {
 async function useFallback(pets, except) {
   for (const key of defaultPets(pets, except)) if (await usePet(key, false)) return;
   console.error("no pet could be loaded");
-  say("一只宠物都加载不出来，安装可能损坏了，请重新安装 Coquou", 30);
+  say(t("一只宠物都加载不出来，安装可能损坏了，请重新安装 Coquou", "No pet could be loaded. The install may be damaged; please reinstall Coquou"), 30);
 }
+
+// Interface language (i18n.rs), for speech: system messages and the default lines.
+const loadLang = () => invoke("get_settings").then((s) => window.Coquou.setLang(s.lang)).catch((e) => console.warn("language", e));
+listen("settings-changed", loadLang);
 
 // Pet: one installed or named with --pet before the page was listening,
 // else the remembered one, else the defaults.
 (async () => {
+  await loadLang();
   // The feed only reports movement; start from where the cursor is now.
   invoke("cursor_local").then((c) => { if (!cursor) cursor = c; }).catch(() => {});
   applyPrefs(await invoke("prefs_get"));
@@ -561,7 +582,9 @@ async function useFallback(pets, except) {
     invoke("prefs_set", { patch: { firstRunDone: true } }).catch(() => {});
     invoke("open_window", { name: "app" }).catch(() => {});
     setTimeout(() => say(platform === "macos"
-      ? "你好呀！我住在屏幕右上角的菜单栏里，点那里的图标或者右键点我，可以叫我回来、哄我睡觉"
-      : "你好呀！我住在屏幕右下角的通知区域，单击图标打开主窗口，右键图标或者右键点我，可以叫我回来、哄我睡觉", 8), 1500);
+      ? t("你好呀！我住在屏幕右上角的菜单栏里，点那里的图标或者右键点我，可以叫我回来、哄我睡觉",
+        "Hi there! I live in the menu bar at the top right. Click the icon there, or right-click me, to call me back or put me to sleep")
+      : t("你好呀！我住在屏幕右下角的通知区域，单击图标打开主窗口，右键图标或者右键点我，可以叫我回来、哄我睡觉",
+        "Hi there! I live in the notification area at the bottom right. Click the icon to open the main window; right-click it, or me, to call me back or put me to sleep"), 8), 1500);
   }
 })();

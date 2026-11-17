@@ -89,7 +89,7 @@ fn modify<R: Runtime, T>(app: &AppHandle<R>, change: impl FnOnce(&mut Vec<Profil
     let out = change(&mut profiles)?;
     let path = profiles_path(app)?;
     let json = serde_json::to_string_pretty(&profiles).map_err(|e| e.to_string())?;
-    crate::fsutil::write_atomic(&path, json.as_bytes()).map_err(|e| format!("保存 AI 配置失败：{e}"))?;
+    crate::fsutil::write_atomic(&path, json.as_bytes()).map_err(|e| tr!(format!("保存 AI 配置失败：{e}"), format!("Could not save the AI profile: {e}")))?;
     Ok(out)
 }
 
@@ -105,13 +105,16 @@ fn transport_allowed(url: &str) -> bool {
 }
 
 /// What the system key store is called in messages.
-#[cfg(target_os = "macos")]
-const KEYSTORE: &str = "钥匙串";
-#[cfg(not(target_os = "macos"))]
-const KEYSTORE: &str = "凭据管理器";
+fn keystore() -> &'static str {
+    if cfg!(target_os = "macos") {
+        tr!("钥匙串", "Keychain")
+    } else {
+        tr!("凭据管理器", "Credential Manager")
+    }
+}
 
 fn entry(id: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, id).map_err(|e| format!("{KEYSTORE}不可用：{e}"))
+    keyring::Entry::new(KEYCHAIN_SERVICE, id).map_err(|e| tr!(format!("{}不可用：{e}", keystore()), format!("{} is unavailable: {e}", keystore())))
 }
 
 /// Keys read from the keychain are cached for the life of the process, so
@@ -130,8 +133,8 @@ fn get_key(id: &str) -> Result<String, String> {
     }
     let key = match entry(id)?.get_password() {
         Ok(k) if !k.is_empty() => k,
-        Ok(_) | Err(keyring::Error::NoEntry) => migrate_old_key(id)?.ok_or("这个配置还没有填 API key")?,
-        Err(e) => return Err(format!("读不了{KEYSTORE}里的 API key：{e}")),
+        Ok(_) | Err(keyring::Error::NoEntry) => migrate_old_key(id)?.ok_or(tr!("这个配置还没有填 API key", "This profile has no API key yet"))?,
+        Err(e) => return Err(tr!(format!("读不了{}里的 API key：{e}", keystore()), format!("Cannot read the API key from {}: {e}", keystore()))),
     };
     lock(key_cache()).insert(id.to_string(), key.clone());
     Ok(key)
@@ -144,13 +147,18 @@ fn migrate_old_key(id: &str) -> Result<Option<String>, String> {
         let Ok(old) = keyring::Entry::new(service, id) else { continue };
         match old.get_password() {
             Ok(k) if !k.is_empty() => {
-                entry(id)?.set_password(&k).map_err(|e| format!("保存 API key 失败：{e}"))?;
+                entry(id)?.set_password(&k).map_err(|e| tr!(format!("保存 API key 失败：{e}"), format!("Could not save the API key: {e}")))?;
                 forget_old_keys(id);
                 log::info!("ai: moved the API key of profile {id} from {service}");
                 return Ok(Some(k));
             }
             Ok(_) | Err(keyring::Error::NoEntry) => {}
-            Err(e) => return Err(format!("读不了{KEYSTORE}里旧的 API key（{e}），可以在配置里重新填一次 key")),
+            Err(e) => {
+                return Err(tr!(
+                    format!("读不了{}里旧的 API key（{e}），可以在配置里重新填一次 key", keystore()),
+                    format!("Cannot read the old API key from {} ({e}); enter the key in the profile again", keystore())
+                ))
+            }
         }
     }
     Ok(None)
@@ -183,16 +191,20 @@ pub fn ai_profiles(app: AppHandle) -> Vec<ProfileView> {
 #[tauri::command]
 pub fn ai_save_profile(app: AppHandle, mut profile: Profile, api_key: Option<String>) -> Result<ProfileView, String> {
     if !matches!(profile.protocol.as_str(), "images" | "chat") {
-        return Err(format!("不支持的协议：{}", profile.protocol));
+        return Err(tr!(format!("不支持的协议：{}", profile.protocol), format!("Unsupported protocol: {}", profile.protocol)));
     }
     let url = profile.base_url.trim().trim_end_matches('/').to_string();
     if !transport_allowed(&url) {
-        return Err("API 地址需要以 https:// 开头（http:// 只能用于本机地址）".into());
+        return Err(tr!(
+            "API 地址需要以 https:// 开头（http:// 只能用于本机地址）",
+            "The API URL must start with https:// (http:// is only for this computer)"
+        )
+        .into());
     }
     profile.base_url = url;
     profile.model = profile.model.trim().to_string();
     if profile.model.is_empty() {
-        return Err("请填写模型名".into());
+        return Err(tr!("请填写模型名", "Please enter a model name").into());
     }
     if profile.id.is_empty() {
         let n = std::time::SystemTime::now()
@@ -202,7 +214,7 @@ pub fn ai_save_profile(app: AppHandle, mut profile: Profile, api_key: Option<Str
         profile.id = format!("p{n}");
     }
     if let Some(key) = api_key.map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
-        entry(&profile.id)?.set_password(&key).map_err(|e| format!("保存 API key 失败：{e}"))?;
+        entry(&profile.id)?.set_password(&key).map_err(|e| tr!(format!("保存 API key 失败：{e}"), format!("Could not save the API key: {e}")))?;
         forget_old_keys(&profile.id);
         lock(key_cache()).insert(profile.id.clone(), key);
         profile.key_saved = Some(true);
@@ -251,7 +263,7 @@ async fn read_body(mut resp: reqwest::Response) -> Result<Vec<u8>, String> {
     let mut body = Vec::new();
     while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
         if body.len() + chunk.len() > MAX_RESPONSE_BYTES {
-            return Err("接口返回的数据太大".into());
+            return Err(tr!("接口返回的数据太大", "The API returned too much data").into());
         }
         body.extend_from_slice(&chunk);
     }
@@ -269,27 +281,29 @@ async fn check(resp: reqwest::Response) -> Result<Value, String> {
             .map(str::to_string)
             .unwrap_or_else(|| text.chars().take(300).collect());
         let hint = match status.as_u16() {
-            401 | 403 => "（API key 无效或没有权限）",
-            404 => "（地址或模型名不对？地址一般以 /v1 结尾）",
-            429 => "（请求太频繁或额度不足）",
+            401 | 403 => tr!("（API key 无效或没有权限）", " (invalid API key or no permission)"),
+            404 => tr!("（地址或模型名不对？地址一般以 /v1 结尾）", " (wrong URL or model? The URL usually ends with /v1)"),
+            429 => tr!("（请求太频繁或额度不足）", " (too many requests or out of credit)"),
             _ => "",
         };
-        return Err(format!("HTTP {status}{hint}：{msg}"));
+        return Err(tr!(format!("HTTP {status}{hint}：{msg}"), format!("HTTP {status}{hint}: {msg}")));
     }
     if body.is_null() {
-        return Err(format!("返回的不是 JSON：{}", text.chars().take(200).collect::<String>()));
+        let head: String = text.chars().take(200).collect();
+        return Err(tr!(format!("返回的不是 JSON：{head}"), format!("The response is not JSON: {head}")));
     }
     Ok(body)
 }
 
 async fn fetch_b64(url: &str) -> Result<String, String> {
     if let Some(rest) = url.strip_prefix("data:") {
-        let (_, data) = rest.split_once(";base64,").ok_or("无法解析返回的 data URL")?;
+        let (_, data) = rest.split_once(";base64,").ok_or(tr!("无法解析返回的 data URL", "Cannot parse the returned data URL"))?;
         return Ok(data.to_string());
     }
-    let resp = client()?.get(url).send().await.map_err(|e| format!("下载生成的图片失败：{e}"))?;
+    let resp = client()?.get(url).send().await.map_err(|e| tr!(format!("下载生成的图片失败：{e}"), format!("Could not download the generated image: {e}")))?;
     if !resp.status().is_success() {
-        return Err(format!("下载生成的图片失败：HTTP {}", resp.status()));
+        let status = resp.status();
+        return Err(tr!(format!("下载生成的图片失败：HTTP {status}"), format!("Could not download the generated image: HTTP {status}")));
     }
     Ok(B64.encode(read_body(resp).await?))
 }
@@ -328,7 +342,7 @@ async fn images_with_references(p: &Profile, key: &str, prompt: &str, images: &[
         .json(&req)
         .send()
         .await
-        .map_err(|e| format!("连接失败：{e}"))
+        .map_err(|e| tr!(format!("连接失败：{e}"), format!("Connection failed: {e}")))
 }
 
 /// `fell_back` is set as soon as the endpoint turns out to have no
@@ -347,7 +361,7 @@ async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], siz
             .json(&req)
             .send()
             .await
-            .map_err(|e| format!("连接失败：{e}"))?
+            .map_err(|e| tr!(format!("连接失败：{e}"), format!("Connection failed: {e}")))?
     } else {
         let mut form = reqwest::multipart::Form::new()
             .text("model", p.model.clone())
@@ -370,7 +384,7 @@ async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], siz
             .multipart(form)
             .send()
             .await
-            .map_err(|e| format!("连接失败：{e}"))?;
+            .map_err(|e| tr!(format!("连接失败：{e}"), format!("Connection failed: {e}")))?;
         // No /images/edits here (e.g. OpenRouter): use /images + input_references.
         if matches!(resp.status().as_u16(), 404 | 405) {
             log::info!("ai: /images/edits not found, trying /images with input_references");
@@ -388,7 +402,7 @@ async fn via_images(p: &Profile, key: &str, prompt: &str, images: &[String], siz
     if let Some(url) = item["url"].as_str() {
         return fetch_b64(url).await;
     }
-    Err("返回里没有图片（data[0].b64_json / url）".into())
+    Err(tr!("返回里没有图片（data[0].b64_json / url）", "No image in the response (data[0].b64_json / url)").into())
 }
 
 /// Find the first image in a chat completion, tolerating relay variants.
@@ -431,11 +445,15 @@ async fn via_chat(p: &Profile, key: &str, prompt: &str, images: &[String], size:
         .json(&req)
         .send()
         .await
-        .map_err(|e| format!("连接失败：{e}"))?;
+        .map_err(|e| tr!(format!("连接失败：{e}"), format!("Connection failed: {e}")))?;
     let body = check(resp).await?;
     let url = chat_image(&body).ok_or_else(|| {
         let said = body["choices"][0]["message"]["content"].as_str().unwrap_or("").chars().take(160).collect::<String>();
-        format!("模型没有返回图片（确认模型支持图像输出）{}", if said.is_empty() { String::new() } else { format!("：{said}") })
+        let said = if said.is_empty() { said } else { tr!(format!("：{said}"), format!(": {said}")) };
+        tr!(
+            format!("模型没有返回图片（确认模型支持图像输出）{said}"),
+            format!("The model returned no image (check that it supports image output){said}")
+        )
     })?;
     fetch_b64(&url).await
 }
@@ -449,7 +467,7 @@ pub async fn ai_generate(
     images: Vec<String>,
     size: String,
 ) -> Result<String, String> {
-    let profile = load(&app).into_iter().find(|p| p.id == profile_id).ok_or("找不到这个 AI 配置")?;
+    let profile = load(&app).into_iter().find(|p| p.id == profile_id).ok_or(tr!("找不到这个 AI 配置", "AI profile not found"))?;
     let key = get_key(&profile.id)?;
     let started = std::time::Instant::now();
     let fell_back = AtomicBool::new(false);

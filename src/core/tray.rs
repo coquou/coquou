@@ -1,4 +1,5 @@
 //! Tray menu: only quick actions; everything else lives in the app window.
+//! Rebuilt (`refresh`) when the update state or the interface language changes.
 //! Right-clicking the pet pops up the same menu minus「退出」, and the same handler serves
 //! the macOS app menu.
 
@@ -31,7 +32,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Rebuild the menu (the update state changed).
+/// Rebuild the menu (the update state or the language changed).
 pub fn refresh<R: Runtime>(app: &AppHandle<R>) {
     if let (Some(tray), Ok(menu)) = (app.tray_by_id(ID), menu(app, true)) {
         let _ = tray.set_menu(Some(menu));
@@ -51,16 +52,16 @@ fn icon() -> tauri::image::Image<'static> {
 /// `with_quit`: the tray offers 退出; the pet's right-click menu leaves it
 /// out so a stray click on the pet can't close the app.
 fn menu<R: Runtime>(app: &AppHandle<R>, with_quit: bool) -> tauri::Result<Menu<R>> {
-    let mut items: Vec<Box<dyn IsMenuItem<R>>> = vec![Box::new(MenuItem::with_id(app, "open", "打开 Coquou", true, None::<&str>)?)];
+    let mut items: Vec<Box<dyn IsMenuItem<R>>> = vec![Box::new(MenuItem::with_id(app, "open", tr!("打开 Coquou", "Open Coquou"), true, None::<&str>)?)];
     if let Some(v) = crate::update::available_version(app) {
-        items.push(Box::new(MenuItem::with_id(app, "update", format!("有新版本 {v}，查看更新…"), true, None::<&str>)?));
+        items.push(Box::new(MenuItem::with_id(app, "update", tr!(format!("有新版本 {v}，查看更新…"), format!("Version {v} is available…")), true, None::<&str>)?));
     }
     items.push(Box::new(PredefinedMenuItem::separator(app)?));
-    items.push(Box::new(MenuItem::with_id(app, "reset", "叫 TA 回来", true, None::<&str>)?));
-    items.push(Box::new(MenuItem::with_id(app, "sleep", "哄 TA 睡觉", true, None::<&str>)?));
+    items.push(Box::new(MenuItem::with_id(app, "reset", tr!("叫 TA 回来", "Call them back"), true, None::<&str>)?));
+    items.push(Box::new(MenuItem::with_id(app, "sleep", tr!("哄 TA 睡觉", "Put them to sleep"), true, None::<&str>)?));
     if with_quit {
         items.push(Box::new(PredefinedMenuItem::separator(app)?));
-        items.push(Box::new(MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?));
+        items.push(Box::new(MenuItem::with_id(app, "quit", tr!("退出", "Quit"), true, None::<&str>)?));
     }
     let refs: Vec<&dyn IsMenuItem<R>> = items.iter().map(|b| b.as_ref()).collect();
     Menu::with_items(app, &refs)

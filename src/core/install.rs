@@ -45,7 +45,7 @@ impl Budget {
     fn add_file(&mut self) -> Result<(), String> {
         self.files += 1;
         if self.files > MAX_FILES {
-            return Err(format!("文件太多（上限 {MAX_FILES} 个）"));
+            return Err(tr!(format!("文件太多（上限 {MAX_FILES} 个）"), format!("Too many files (at most {MAX_FILES})")));
         }
         Ok(())
     }
@@ -57,7 +57,7 @@ impl Budget {
 
     fn charge(&mut self, len: u64) -> Result<(), String> {
         if len > self.room() {
-            return Err("宠物包太大".into());
+            return Err(tr!("宠物包太大", "The pet package is too large").into());
         }
         self.bytes += len;
         Ok(())
@@ -77,13 +77,13 @@ fn is_junk(path: &Path) -> bool {
 
 fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     let file = fs::File::open(archive).map_err(|e| e.to_string())?;
-    let mut zip = zip::ZipArchive::new(file).map_err(|_| "不是有效的 .pet / .zip 文件".to_string())?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|_| tr!("不是有效的 .pet / .zip 文件", "Not a valid .pet / .zip file").to_string())?;
     let mut budget = Budget::default();
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
         let rel = entry
             .enclosed_name()
-            .ok_or_else(|| format!("压缩包里有非法路径：{}", entry.name()))?;
+            .ok_or_else(|| tr!(format!("压缩包里有非法路径：{}", entry.name()), format!("Invalid path in the archive: {}", entry.name())))?;
         if entry.is_dir() || entry.is_symlink() || is_junk(&rel) {
             continue;
         }
@@ -135,7 +135,7 @@ fn locate_pet_dir(staging: &Path) -> Result<PathBuf, String> {
         .collect();
     match dirs.as_slice() {
         [only] if only.join("pet.json").is_file() => Ok(only.clone()),
-        _ => Err("没找到 pet.json，这不是一个宠物包".into()),
+        _ => Err(tr!("没找到 pet.json，这不是一个宠物包", "No pet.json found; this is not a pet package").into()),
     }
 }
 
@@ -155,7 +155,8 @@ fn read_header(path: &Path) -> Option<Vec<u8>> {
 fn read_json_text(path: &Path) -> Option<Result<String, String>> {
     let meta = fs::metadata(path).ok().filter(|m| m.is_file())?;
     if meta.len() > MAX_JSON_BYTES {
-        return Some(Err(format!("{} 太大", path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default())));
+        let name = path.file_name().map(|n| n.to_string_lossy()).unwrap_or_default();
+        return Some(Err(tr!(format!("{name} 太大"), format!("{name} is too large"))));
     }
     Some(fs::read_to_string(path).map_err(|e| e.to_string()))
 }
@@ -195,17 +196,20 @@ pub fn check_lines(lines: &Lines) -> Result<(), String> {
     const MAX_CHARS: usize = 80;
     for (kind, list) in lines {
         if list.len() > MAX_PER_KIND {
-            return Err(format!("lines.{kind} 最多 {MAX_PER_KIND} 句"));
+            return Err(tr!(format!("lines.{kind} 最多 {MAX_PER_KIND} 句"), format!("lines.{kind} can have at most {MAX_PER_KIND} lines")));
         }
         if list.iter().any(|t| t.chars().count() > MAX_CHARS) {
-            return Err(format!("lines.{kind} 里有一句超过 {MAX_CHARS} 个字"));
+            return Err(tr!(
+                format!("lines.{kind} 里有一句超过 {MAX_CHARS} 个字"),
+                format!("A line in lines.{kind} is longer than {MAX_CHARS} characters")
+            ));
         }
     }
     Ok(())
 }
 
 fn parse_lines(value: &serde_json::Value) -> Result<Lines, String> {
-    serde_json::from_value(value.clone()).map_err(|_| "coquou.json 的 lines 必须是 { 场合: [字符串…] }".to_string())
+    serde_json::from_value(value.clone()).map_err(|_| tr!("coquou.json 的 lines 必须是 { 场合: [字符串…] }", "lines in coquou.json must be { occasion: [string…] }").to_string())
 }
 
 /// The extension file: `coquou.json`, or `perchy.json` from before the rename.
@@ -213,49 +217,55 @@ pub const EXT_FILES: [&str; 2] = ["coquou.json", "perchy.json"];
 
 /// Check the pet against doc/pet-format.md; returns (id, displayName).
 fn validate(dir: &Path) -> Result<(String, String), String> {
-    let text = read_json_text(&dir.join("pet.json")).ok_or("读不了 pet.json")??;
+    let text = read_json_text(&dir.join("pet.json")).ok_or(tr!("读不了 pet.json", "Cannot read pet.json"))??;
     let manifest: serde_json::Value =
-        serde_json::from_str(&text).map_err(|e| format!("pet.json 格式错误：{e}"))?;
+        serde_json::from_str(&text).map_err(|e| tr!(format!("pet.json 格式错误：{e}"), format!("pet.json is malformed: {e}")))?;
 
     let id = manifest["id"].as_str().unwrap_or_default().to_string();
     let id_ok = (1..=64).contains(&id.len())
         && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
         && !id.starts_with(['-', '_']);
     if !id_ok {
-        return Err(format!("pet.json 里的 id 不合法：\"{id}\"（只能用字母、数字、- 和 _）"));
+        return Err(tr!(
+            format!("pet.json 里的 id 不合法：\"{id}\"（只能用字母、数字、- 和 _）"),
+            format!("Invalid id in pet.json: \"{id}\" (letters, digits, - and _ only)")
+        ));
     }
     let display_name = manifest["displayName"].as_str().unwrap_or(&id).to_string();
 
     let sheet = manifest["spritesheetPath"].as_str().unwrap_or("spritesheet.webp");
     if !safe_rel(sheet) {
-        return Err(format!("spritesheetPath 不合法：{sheet}"));
+        return Err(tr!(format!("spritesheetPath 不合法：{sheet}"), format!("Invalid spritesheetPath: {sheet}")));
     }
-    let head = read_header(&dir.join(sheet)).ok_or(format!("缺少精灵图 {sheet}"))?;
-    let (w, h) = image_size(&head).ok_or("精灵图必须是 PNG 或 WebP")?;
+    let head = read_header(&dir.join(sheet)).ok_or_else(|| tr!(format!("缺少精灵图 {sheet}"), format!("Missing spritesheet {sheet}")))?;
+    let (w, h) = image_size(&head).ok_or(tr!("精灵图必须是 PNG 或 WebP", "The spritesheet must be PNG or WebP"))?;
     let version = manifest["spriteVersionNumber"].as_u64().unwrap_or(1);
     let rows = if version >= 2 { 11 } else { 9 };
     let (cw, ch) = CODEX_CELL;
     if (w, h) != (cw * 8, ch * rows) {
-        return Err(format!(
-            "精灵图尺寸 {w}×{h} 不对，Codex v{version} 需要 {}×{}",
-            cw * 8,
-            ch * rows
+        let (nw, nh) = (cw * 8, ch * rows);
+        return Err(tr!(
+            format!("精灵图尺寸 {w}×{h} 不对，Codex v{version} 需要 {nw}×{nh}"),
+            format!("The spritesheet is {w}×{h}; Codex v{version} needs {nw}×{nh}")
         ));
     }
 
     if let Some(text) = EXT_FILES.iter().find_map(|f| read_json_text(&dir.join(f))) {
         let ext: serde_json::Value =
-            serde_json::from_str(&text?).map_err(|e| format!("coquou.json 格式错误：{e}"))?;
+            serde_json::from_str(&text?).map_err(|e| tr!(format!("coquou.json 格式错误：{e}"), format!("coquou.json is malformed: {e}")))?;
         if let Some(hd) = ext.get("hd").and_then(|v| v.as_str()) {
             let size = safe_rel(hd).then(|| read_header(&dir.join(hd))).flatten().as_deref().and_then(image_size);
             let ok = size.is_some_and(|(hw, hh)| hw % w == 0 && hw / w >= 2 && hw / w <= 4 && hw * h == hh * w);
             if !ok {
-                return Err(format!("coquou.json 的 hd 图集 {hd} 不存在，或不是主图集的 2–4 倍"));
+                return Err(tr!(
+                    format!("coquou.json 的 hd 图集 {hd} 不存在，或不是主图集的 2–4 倍"),
+                    format!("The hd atlas {hd} in coquou.json is missing or not 2–4× the main atlas")
+                ));
             }
         }
         if let Some(facing) = ext.get("facing") {
             if !matches!(facing.as_str(), Some("left" | "right" | "front")) {
-                return Err("coquou.json 的 facing 只能是 left、right 或 front".into());
+                return Err(tr!("coquou.json 的 facing 只能是 left、right 或 front", "facing in coquou.json must be left, right or front").into());
             }
         }
         if let Some(lines) = ext.get("lines") {
@@ -265,7 +275,10 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
             for (name, state) in states {
                 if let Some(sheet) = state["sheet"].as_str() {
                     if !safe_rel(sheet) || !dir.join(sheet).is_file() {
-                        return Err(format!("coquou.json 的状态 {name} 引用的 {sheet} 不存在"));
+                        return Err(tr!(
+                            format!("coquou.json 的状态 {name} 引用的 {sheet} 不存在"),
+                            format!("{sheet}, used by state {name} in coquou.json, does not exist")
+                        ));
                     }
                 }
             }
@@ -315,7 +328,7 @@ fn swap_into_place(new: &Path, dest: &Path, root: &Path) -> Result<bool, String>
 }
 
 pub fn install<R: Runtime>(app: &AppHandle<R>, src: &Path) -> Result<Installed, String> {
-    let root = pets::coquou_root(app).ok_or("找不到应用数据目录")?;
+    let root = pets::coquou_root(app).ok_or(tr!("找不到应用数据目录", "Cannot find the app data folder"))?;
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     let staging = root.join(format!("{STAGING_PREFIX}{}", nonce()));
 
@@ -329,7 +342,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, src: &Path) -> Result<Installed, 
                     fs::create_dir_all(&staging).map_err(|e| e.to_string())?;
                     extract_zip(src, &staging)?;
                 }
-                _ => return Err("只支持 .pet、.zip 或宠物文件夹".into()),
+                _ => return Err(tr!("只支持 .pet、.zip 或宠物文件夹", "Only .pet, .zip or pet folders are supported").into()),
             }
         }
         let pet_dir = locate_pet_dir(&staging)?;

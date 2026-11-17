@@ -12,35 +12,35 @@
     <div class="drag" data-tauri-drag-region></div>
     <div class="brand" data-tauri-drag-region>
       <img src="app-icon.png" alt="" />
-      <div><b>Coquou</b><span>桌面宠物</span></div>
+      <div><b>Coquou</b><span data-en="Desktop pet">桌面宠物</span></div>
     </div>
     <nav>
-      <button data-page="pets" class="on">
+      <button data-page="pets" class="on" data-en="Pets">
         <svg viewBox="0 0 24 24"><circle cx="5.5" cy="10" r="2"/><circle cx="9.5" cy="5.5" r="2"/><circle cx="14.5" cy="5.5" r="2"/><circle cx="18.5" cy="10" r="2"/><path d="M12 11c-3 0-6 4.2-6 6.6 0 1.7 1.3 2.4 3 2.4 1.2 0 2-.6 3-.6s1.8.6 3 .6c1.7 0 3-.7 3-2.4 0-2.4-3-6.6-6-6.6z"/></svg>
         宠物
       </button>
-      <button data-page="hatch">
+      <button data-page="hatch" data-en="Hatch">
         <svg viewBox="0 0 24 24"><path d="M12 3c3.6 0 6.5 5.4 6.5 9.6S15.6 21 12 21s-6.5-4.2-6.5-8.4S8.4 3 12 3z"/><path d="M6 12.5l2.4-2 2 2.2 1.8-2.2 2 2.2 2-2.2 1.8 2"/></svg>
         孵化
         <i class="dot" id="navHatchDot" hidden></i>
       </button>
-      <button data-page="behaviour">
+      <button data-page="behaviour" data-en="Behaviour">
         <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
         行为
       </button>
-      <button data-page="general">
+      <button data-page="general" data-en="General">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         通用
       </button>
-      <button data-page="about">
+      <button data-page="about" data-en="About">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>
         关于
         <i class="dot" id="navUpdateDot" hidden></i>
       </button>
     </nav>
-    <div class="now" id="now" title="正在桌面上的宠物">
+    <div class="now" id="now" title="正在桌面上的宠物" data-en-title="The pet on your desktop">
       <canvas id="nowThumb" width="80" height="88"></canvas>
-      <div><span>正在陪你</span><b id="nowName">—</b></div>
+      <div><span data-en="Keeping you company">正在陪你</span><b id="nowName">—</b></div>
     </div>
   </aside>
 
@@ -48,74 +48,74 @@
     <!-- ======== 宠物 ======== -->
     <section class="page" id="page-pets">
       <header class="head" data-tauri-drag-region>
-        <h1>宠物</h1>
+        <h1 data-en="Pets">宠物</h1>
         <div class="tools">
-          <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="search" type="search" placeholder="搜索宠物" /></label>
-          <button class="btn" id="importBtn"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>导入</button>
-          <button class="btn primary" id="hatchBtn"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>孵化新宠物</button>
+          <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4 4"/></svg><input id="search" type="search" placeholder="搜索宠物" data-en-placeholder="Search pets" /></label>
+          <button class="btn" id="importBtn" data-en="Import"><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>导入</button>
+          <button class="btn primary" id="hatchBtn" data-en="Hatch a pet"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>孵化新宠物</button>
           <input type="file" id="importFile" accept=".pet,.zip" multiple hidden />
         </div>
       </header>
       <div class="scroll">
         <div class="welcome" id="welcome" hidden>
           <div>
-            <b>欢迎使用 Coquou！</b>
+            <b data-en="Welcome to Coquou!">欢迎使用 Coquou！</b>
             <p id="welcomeText"></p>
           </div>
-          <button class="btn" id="welcomeOk">知道了</button>
+          <button class="btn" id="welcomeOk" data-en="Got it">知道了</button>
         </div>
         <div class="filters seg" id="filters"></div>
         <div class="library">
           <div class="grid" id="grid"></div>
           <aside class="detail" id="detail"></aside>
         </div>
-        <p class="hint">把 .pet / .zip 宠物包拖进这个窗口，或拖到桌面上的宠物身上，都能安装。</p>
+        <p class="hint" data-en="Drop a .pet / .zip pet package on this window, or on the pet on your desktop, to install it.">把 .pet / .zip 宠物包拖进这个窗口，或拖到桌面上的宠物身上，都能安装。</p>
       </div>
     </section>
 
     <!-- ======== 孵化 ======== -->
     <section class="page" id="page-hatch" hidden>
       <header class="head" data-tauri-drag-region>
-        <h1>孵化</h1>
-        <span class="head-note">用 AI 把一段描述或一张图，变成一只会走会跳的桌面宠物</span>
+        <h1 data-en="Hatch">孵化</h1>
+        <span class="head-note" data-en="Turn a description or a picture into a desktop pet that walks and jumps, with AI">用 AI 把一段描述或一张图，变成一只会走会跳的桌面宠物</span>
       </header>
       <div class="scroll hatch">
         <!-- ① AI 接口 -->
         <section class="step-card">
-          <h2><i>1</i>AI 接口<small>OpenAI 兼容的图像接口，例如 OpenAI、OpenRouter</small></h2>
+          <h2 data-en="AI service"><i>1</i>AI 接口<small data-en="An OpenAI-compatible image API, such as OpenAI or OpenRouter">OpenAI 兼容的图像接口，例如 OpenAI、OpenRouter</small></h2>
           <div class="hrow">
             <select id="profile"></select>
-            <button class="btn" id="newProfile" type="button">新建</button>
+            <button class="btn" id="newProfile" type="button" data-en="New">新建</button>
           </div>
           <div class="summary" id="profileSummary" hidden>
             <div class="ok-dot"></div>
             <div class="grow"><b id="sumName"></b><small id="sumModel"></small></div>
-            <button class="btn" id="editProfile" type="button">编辑</button>
+            <button class="btn" id="editProfile" type="button" data-en="Edit">编辑</button>
           </div>
           <div class="form" id="profileForm">
-            <label>名称<input type="text" id="pName" placeholder="例如：OpenAI 官方" /></label>
-            <label>协议
+            <label data-en="Name">名称<input type="text" id="pName" placeholder="例如：OpenAI 官方" data-en-placeholder="e.g. OpenAI" /></label>
+            <label data-en="Protocol">协议
               <select id="pProtocol">
-                <option value="images">OpenAI Images（/images/edits）</option>
-                <option value="chat">OpenAI Chat 输出图片（/chat/completions）</option>
+                <option value="images" data-en="OpenAI Images (/images/edits)">OpenAI Images（/images/edits）</option>
+                <option value="chat" data-en="OpenAI Chat with image output (/chat/completions)">OpenAI Chat 输出图片（/chat/completions）</option>
               </select>
             </label>
-            <label>API 地址<input type="text" id="pUrl" placeholder="https://api.openai.com/v1" /></label>
-            <label>模型<input type="text" id="pModel" placeholder="gpt-image-2" /></label>
+            <label data-en="API URL">API 地址<input type="text" id="pUrl" placeholder="https://api.openai.com/v1" /></label>
+            <label data-en="Model">模型<input type="text" id="pModel" placeholder="gpt-image-2" /></label>
             <label class="wide">API key<input type="password" id="pKey" placeholder="sk-…" autocomplete="off" /></label>
             <div id="imagesOpts" class="wide two">
-              <label>质量
+              <label data-en="Quality">质量
                 <select id="pQuality">
-                  <option value="">不指定</option><option value="low">low（便宜）</option>
+                  <option value="" data-en="Not set">不指定</option><option value="low" data-en="low (cheap)">low（便宜）</option>
                   <option value="medium">medium</option><option value="high">high</option><option value="auto">auto</option>
                 </select>
               </label>
-              <label class="check"><input type="checkbox" id="pTransparent" /> 请求透明背景（接口支持时更干净）</label>
+              <label class="check" data-en="Ask for a transparent background (cleaner when the API supports it)"><input type="checkbox" id="pTransparent" /> 请求透明背景（接口支持时更干净）</label>
             </div>
             <div class="wide actions">
-              <button class="btn primary" id="saveProfile" type="button">保存</button>
-              <button class="btn" id="testProfile" type="button">测试连接</button>
-              <button class="btn ghost danger" id="deleteProfile" type="button">删除</button>
+              <button class="btn primary" id="saveProfile" type="button" data-en="Save">保存</button>
+              <button class="btn" id="testProfile" type="button" title="会真的生成 1 张小图，产生一次调用费用" data-en="Test" data-en-title="Really generates one small image, which costs one API call">测试连接</button>
+              <button class="btn ghost danger" id="deleteProfile" type="button" data-en="Delete">删除</button>
               <span class="status" id="profileStatus"></span>
             </div>
             <p class="hint wide" id="keyHint"></p>
@@ -124,55 +124,55 @@
 
         <!-- ② 宠物 -->
         <section class="step-card">
-          <h2><i>2</i>描述你的宠物</h2>
+          <h2 data-en="Describe your pet"><i>2</i>描述你的宠物</h2>
           <div class="pet-form">
             <div class="fields">
-              <label>名字<input type="text" id="petName" placeholder="例如：橘子" /></label>
-              <label>描述<textarea id="petDesc" placeholder="外观和性格，例如：圆滚滚的橘色短毛猫，戴红色小围巾，元气满满"></textarea></label>
-              <label>风格
+              <label data-en="Name">名字<input type="text" id="petName" placeholder="例如：橘子" data-en-placeholder="e.g. Clementine" /></label>
+              <label data-en="Description">描述<textarea id="petDesc" placeholder="外观和性格，例如：圆滚滚的橘色短毛猫，戴红色小围巾，元气满满" data-en-placeholder="Looks and personality, e.g. a round orange shorthair cat with a little red scarf, full of energy"></textarea></label>
+              <label data-en="Style">风格
                 <select id="style">
-                  <option value="auto">跟随参考图 / 描述</option>
-                  <option value="chibi">Q 版二次元</option>
-                  <option value="pixel">像素风</option>
-                  <option value="plush">毛绒玩具</option>
-                  <option value="clay">黏土</option>
-                  <option value="toy3d">3D 玩具</option>
-                  <option value="flat">扁平矢量</option>
+                  <option value="auto" data-en="Follow the reference / description">跟随参考图 / 描述</option>
+                  <option value="chibi" data-en="Chibi anime">Q 版二次元</option>
+                  <option value="pixel" data-en="Pixel art">像素风</option>
+                  <option value="plush" data-en="Plush toy">毛绒玩具</option>
+                  <option value="clay" data-en="Clay">黏土</option>
+                  <option value="toy3d" data-en="3D toy">3D 玩具</option>
+                  <option value="flat" data-en="Flat vector">扁平矢量</option>
                 </select>
               </label>
-              <label class="check"><input type="checkbox" id="withLook" checked /> 生成 16 个看向方向（眼睛跟着鼠标转）</label>
+              <label class="check" data-en="Generate 16 look directions (eyes follow the mouse)"><input type="checkbox" id="withLook" checked /> 生成 16 个看向方向（眼睛跟着鼠标转）</label>
             </div>
             <div class="ref">
-              <span class="ref-label">参考图（可选）</span>
-              <div id="drop">点击选择，或把图片拖进窗口</div>
+              <span class="ref-label" data-en="Reference image (optional)">参考图（可选）</span>
+              <div id="drop"></div>
               <input type="file" id="file" accept="image/*" hidden />
             </div>
           </div>
           <div class="go">
             <span class="est" id="estimate"></span>
-            <button class="btn primary big" id="genBase" type="button">生成形象</button>
+            <button class="btn primary big" id="genBase" type="button"></button>
           </div>
           <div class="status" id="mainStatus"></div>
         </section>
 
         <!-- ③④⑤ 结果 -->
         <section class="step-card" id="baseCard">
-          <h2><i>3</i>形象</h2>
-          <div id="baseArea" class="empty">填好上面的接口和描述，点「生成形象」。</div>
+          <h2 data-en="Look"><i>3</i>形象</h2>
+          <div id="baseArea" class="empty"></div>
         </section>
         <section class="step-card" id="rowsArea" hidden>
-          <h2><i>4</i>动作
-            <span class="h2-tools"><span class="status" id="rowsStatus"></span><button class="btn primary" id="genAll" type="button">生成全部动作</button></span>
+          <h2 data-en="Animations"><i>4</i>动作
+            <span class="h2-tools"><span class="status" id="rowsStatus"></span><button class="btn primary" id="genAll" type="button" data-en="Generate all">生成全部动作</button></span>
           </h2>
           <div class="hgrid" id="cards"></div>
         </section>
         <section class="step-card" id="finalArea" hidden>
-          <h2><i>5</i>安装</h2>
+          <h2 data-en="Install"><i>5</i>安装</h2>
           <div class="final">
             <canvas id="atlas" class="checker" width="1536" height="2288"></canvas>
             <div class="grow">
-              <label>ID（文件夹名，字母数字 - _）<input type="text" id="petId" /></label>
-              <button class="btn primary big" id="install" type="button">安装到桌面</button>
+              <label data-en="ID (folder name: letters, digits, - and _)">ID（文件夹名，字母数字 - _）<input type="text" id="petId" /></label>
+              <button class="btn primary big" id="install" type="button" data-en="Put on the desktop">安装到桌面</button>
               <div class="status" id="installStatus"></div>
             </div>
           </div>
@@ -182,64 +182,69 @@
 
     <!-- ======== 行为 ======== -->
     <section class="page" id="page-behaviour" hidden>
-      <header class="head" data-tauri-drag-region><h1>行为</h1></header>
+      <header class="head" data-tauri-drag-region><h1 data-en="Behaviour">行为</h1></header>
       <div class="scroll">
-        <h3>活动范围</h3>
+        <h3 data-en="Where they roam">活动范围</h3>
         <div class="zones" id="zones"></div>
-        <p class="hint">宠物只在选中的区域里走动，避免挡住屏幕中间的内容。被拖到别处后会自己走回去。</p>
-        <h3>性格</h3>
+        <p class="hint" data-en="The pet only walks in the chosen area, so it stays out of the middle of the screen. Dragged elsewhere, it walks back by itself.">宠物只在选中的区域里走动，避免挡住屏幕中间的内容。被拖到别处后会自己走回去。</p>
+        <h3 data-en="Personality">性格</h3>
         <div class="card">
-          <div class="row"><div class="label">活跃程度<small>多久走动一次</small></div><div class="seg" id="activity"></div></div>
-          <div class="row"><div class="label">自动睡觉<small>多久没理 TA 就打瞌睡</small></div><div class="seg" id="sleep"></div></div>
-          <div class="row"><div class="label">大小<small>当前宠物的显示大小，每只宠物分别记住</small></div><div class="seg" id="size"></div></div>
-          <div class="row"><div class="label">说话<small>被点、被摸、闲着的时候冒出一句台词</small></div><label class="switch"><input type="checkbox" id="chatter" aria-label="说话" /><span></span></label></div>
+          <div class="row"><div class="label" data-en="Activity">活跃程度<small data-en="How often they walk around">多久走动一次</small></div><div class="seg" id="activity"></div></div>
+          <div class="row"><div class="label" data-en="Nap">自动睡觉<small data-en="Dozes off after being left alone this long">多久没理 TA 就打瞌睡</small></div><div class="seg" id="sleep"></div></div>
+          <div class="row"><div class="label" data-en="Size">大小<small data-en="Display size of the current pet, remembered per pet">当前宠物的显示大小，每只宠物分别记住</small></div><div class="seg" id="size"></div></div>
+          <div class="row"><div class="label" data-en="Talk">说话<small data-en="Says a line when clicked, petted or idle">被点、被摸、闲着的时候冒出一句台词</small></div><label class="switch"><input type="checkbox" id="chatter" aria-label="说话" data-en-aria-label="Talk" /><span></span></label></div>
         </div>
       </div>
     </section>
 
     <!-- ======== 通用 ======== -->
     <section class="page" id="page-general" hidden>
-      <header class="head" data-tauri-drag-region><h1>通用</h1></header>
+      <header class="head" data-tauri-drag-region><h1 data-en="General">通用</h1></header>
       <div class="scroll">
-        <h3>显示</h3>
+        <h3 data-en="Appearance">外观</h3>
         <div class="card">
-          <div class="row"><div class="label">显示器<small>也可以直接把宠物拖到另一块屏幕</small></div><select id="display"></select></div>
-          <div class="row"><div class="label">全屏自动隐藏<small>看视频、玩游戏、演示时不打扰</small></div><label class="switch"><input type="checkbox" id="hideFullscreen" aria-label="全屏自动隐藏" /><span></span></label></div>
+          <div class="row"><div class="label" data-en="Theme">主题</div><div class="seg" id="theme"></div></div>
+          <div class="row"><div class="label" data-en="Language">语言</div><div class="seg" id="language"></div></div>
         </div>
-        <h3>启动与耗电</h3>
+        <h3 data-en="Display">显示</h3>
         <div class="card">
-          <div class="row"><div class="label">开机自动启动</div><label class="switch"><input type="checkbox" id="autostart" aria-label="开机自动启动" /><span></span></label></div>
-          <div class="row"><div class="label">用电池时省电<small>笔记本拔掉电源后降到 30 帧</small></div><label class="switch"><input type="checkbox" id="batterySaver" aria-label="用电池时省电" /><span></span></label></div>
+          <div class="row"><div class="label" data-en="Screen">显示器<small data-en="You can also drag the pet to another screen">也可以直接把宠物拖到另一块屏幕</small></div><select id="display"></select></div>
+          <div class="row"><div class="label" data-en="Hide in full screen">全屏自动隐藏<small data-en="Stays out of the way of videos, games and presentations">看视频、玩游戏、演示时不打扰</small></div><label class="switch"><input type="checkbox" id="hideFullscreen" aria-label="全屏自动隐藏" data-en-aria-label="Hide in full screen" /><span></span></label></div>
         </div>
-        <h3>存储</h3>
+        <h3 data-en="Startup and power">启动与耗电</h3>
         <div class="card">
-          <div class="row"><div class="label">宠物文件夹<small class="path" id="petsDir"></small></div><button class="btn" id="openDir">打开</button></div>
-          <div class="row"><div class="label">Codex 宠物<small class="path" id="codexDir"></small><small>这里的宠物会自动出现在宠物库里（只读）</small></div></div>
+          <div class="row"><div class="label" data-en="Open at login">开机自动启动</div><label class="switch"><input type="checkbox" id="autostart" aria-label="开机自动启动" data-en-aria-label="Open at login" /><span></span></label></div>
+          <div class="row"><div class="label" data-en="Save power on battery">用电池时省电<small data-en="Drops to 30 fps when the laptop is unplugged">笔记本拔掉电源后降到 30 帧</small></div><label class="switch"><input type="checkbox" id="batterySaver" aria-label="用电池时省电" data-en-aria-label="Save power on battery" /><span></span></label></div>
+        </div>
+        <h3 data-en="Storage">存储</h3>
+        <div class="card">
+          <div class="row"><div class="label" data-en="Pets folder">宠物文件夹<small class="path" id="petsDir"></small></div><button class="btn" id="openDir" data-en="Open">打开</button></div>
+          <div class="row"><div class="label" data-en="Codex pets">Codex 宠物<small class="path" id="codexDir"></small><small data-en="Pets here show up in your library automatically (read-only)">这里的宠物会自动出现在宠物库里（只读）</small></div></div>
         </div>
       </div>
     </section>
 
     <!-- ======== 关于 ======== -->
     <section class="page" id="page-about" hidden>
-      <header class="head" data-tauri-drag-region><h1>关于</h1></header>
+      <header class="head" data-tauri-drag-region><h1 data-en="About">关于</h1></header>
       <div class="scroll">
         <div class="card about">
           <img src="app-icon.png" alt="" />
           <div class="grow">
             <b>Coquou</b> <span class="muted" id="version"></span>
-            <p class="muted">开源桌面宠物，兼容 Codex 宠物包。</p>
+            <p class="muted" data-en="An open-source desktop pet, compatible with Codex pet packages.">开源桌面宠物，兼容 Codex 宠物包。</p>
             <div class="links">
-              <button class="link" data-link="home">项目主页</button>
-              <button class="link" data-link="issues">反馈问题</button>
-              <button class="link" data-link="releases">发布记录</button>
+              <button class="link" data-link="home" data-en="Website">项目主页</button>
+              <button class="link" data-link="issues" data-en="Report a problem">反馈问题</button>
+              <button class="link" data-link="releases" data-en="Releases">发布记录</button>
             </div>
           </div>
         </div>
-        <h3>更新</h3>
+        <h3 data-en="Updates">更新</h3>
         <div class="card">
           <div class="row">
-            <div class="label"><span id="updState">当前版本</span><small id="updDetail"></small></div>
-            <button class="btn" id="updCheck">检查更新</button>
+            <div class="label"><span id="updState"></span><small id="updDetail"></small></div>
+            <button class="btn" id="updCheck" data-en="Check for updates">检查更新</button>
           </div>
           <div class="row" id="updAvail" hidden>
             <div class="label">
@@ -247,22 +252,22 @@
               <div id="updNotes" class="notes"></div>
               <div class="progress" id="updProgress" hidden><i></i></div>
             </div>
-            <button class="btn primary" id="updInstall">更新并重启</button>
+            <button class="btn primary" id="updInstall"></button>
           </div>
-          <div class="row"><div class="label">自动检查更新<small>启动后和每隔 6 小时检查一次；有新版本时提示，不会自动安装</small></div><label class="switch"><input type="checkbox" id="autoUpdate" aria-label="自动检查更新" /><span></span></label></div>
+          <div class="row"><div class="label" data-en="Check for updates automatically">自动检查更新<small data-en="At launch and every 6 hours; tells you about a new version, never installs it by itself">启动后和每隔 6 小时检查一次；有新版本时提示，不会自动安装</small></div><label class="switch"><input type="checkbox" id="autoUpdate" aria-label="自动检查更新" data-en-aria-label="Check for updates automatically" /><span></span></label></div>
         </div>
-        <h3>授权</h3>
+        <h3 data-en="Licenses">授权</h3>
         <div class="card">
-          <div class="row"><div class="label">代码<small>MIT</small></div></div>
-          <div class="row"><div class="label">预设宠物「团团」<small>CC BY 4.0 · Coquou contributors</small></div></div>
+          <div class="row"><div class="label" data-en="Code">代码<small>MIT</small></div></div>
+          <div class="row"><div class="label" data-en="Preset pet “团团”">预设宠物「团团」<small>CC BY 4.0 · Coquou contributors</small></div></div>
         </div>
       </div>
     </section>
   </main>
 </div>
 
-<div id="dropOverlay"><div><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="dropText">松手安装宠物</span></div></div>
-<div id="modal" hidden><div class="dialog"><b id="modalTitle"></b><p id="modalText"></p><div class="actions"><button class="btn" id="modalCancel">取消</button><button class="btn danger" id="modalOk">删除</button></div></div></div>
+<div id="dropOverlay"><div><svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg><span id="dropText"></span></div></div>
+<div id="modal" hidden><div class="dialog"><b id="modalTitle"></b><p id="modalText"></p><div class="actions"><button class="btn" id="modalCancel" data-en="Cancel">取消</button><button class="btn danger" id="modalOk"></button></div></div></div>
 <div id="toast"></div>
 <script src="common.js"></script>
 <script src="app.js"></script>
