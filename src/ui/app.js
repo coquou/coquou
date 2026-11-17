@@ -146,6 +146,40 @@ function renderFilters() {
   });
 }
 
+// ---------- pet actions shared by the detail panel and the card menu ----------
+const toggleHidden = (p) => setPrefs({ custom: { pet: p.key, hidden: !p.hidden } })
+  .then((v) => v && toast(p.hidden ? `「${p.displayName}」回到列表了` : `已隐藏「${p.displayName}」，可以在「已隐藏」里找回`));
+// Only pets installed in Coquou's own folder can be deleted.
+async function deletePet(p) {
+  if (!(await confirmDialog(`删除「${p.displayName}」？`, "宠物文件会从 Coquou 的宠物文件夹里删掉，无法恢复。可以先导出一份 .pet 备份。"))) return;
+  invoke("delete_pet", { key: p.key }).then(() => toast(`已删除「${p.displayName}」`)).catch((e) => toast(String(e), true));
+}
+
+// Right-click on a card: a native menu with the panel's quick actions. The
+// last menu is kept until the next one opens, so a click that arrives after
+// the popup returns still finds its handler. Items get no explicit ids: Tauri
+// files handlers by item id and drops them when a menu closes, so a fixed id
+// shared with the next menu would lose that menu's handler.
+let cardMenu = null;
+async function showCardMenu(p) {
+  const { Menu } = window.__TAURI__.menu;
+  const current = p.key === ui.current;
+  const items = [
+    { text: current ? "正在桌面上" : "让TA上桌面", enabled: !current, action: () => usePet(p.key) },
+    { item: "Separator" },
+    { text: p.hidden ? "取消隐藏" : "隐藏", action: () => toggleHidden(p) },
+  ];
+  if (p.source === "coquou") items.push({ text: "删除…", action: () => deletePet(p) });
+  try {
+    const menu = await Menu.new({ items });
+    cardMenu?.close().catch(() => {});
+    cardMenu = menu;
+    await menu.popup();
+  } catch (e) {
+    toast("菜单打不开：" + e, true);
+  }
+}
+
 const cardCanvases = new Map(); // key → canvas
 let hovered = null;
 
@@ -164,6 +198,7 @@ function renderGrid() {
     card.classList.toggle("sel", p.key === selected);
     card.onclick = () => select(p.key);
     card.ondblclick = () => usePet(p.key);
+    card.oncontextmenu = (e) => { e.preventDefault(); select(p.key); showCardMenu(p); };
     card.onkeydown = (e) => { if (e.key === "Enter") usePet(p.key); if (e.key === " ") { e.preventDefault(); select(p.key); } };
     card.onmouseenter = () => (hovered = p.key);
     card.onmouseleave = () => {
@@ -259,15 +294,11 @@ async function renderDetail() {
   const reveal = el("button", { className: "btn ghost", type: "button", textContent: platform === "macos" ? "在访达中显示" : "打开所在文件夹" });
   reveal.onclick = () => invoke("reveal_pet", { key: p.key }).catch((e) => toast(String(e), true));
   const hide = el("button", { className: "btn ghost", type: "button", textContent: p.hidden ? "取消隐藏" : "隐藏" });
-  hide.onclick = () => setPrefs({ custom: { pet: p.key, hidden: !p.hidden } })
-    .then((v) => v && toast(p.hidden ? `「${p.displayName}」回到列表了` : `已隐藏「${p.displayName}」，可以在「已隐藏」里找回`));
+  hide.onclick = () => toggleHidden(p);
   more.append(exp, reveal, hide);
   if (p.source === "coquou") {
     const del = el("button", { className: "btn ghost danger", type: "button", textContent: "删除" });
-    del.onclick = async () => {
-      if (!(await confirmDialog(`删除「${p.displayName}」？`, "宠物文件会从 Coquou 的宠物文件夹里删掉，无法恢复。可以先导出一份 .pet 备份。"))) return;
-      invoke("delete_pet", { key: p.key }).then(() => toast(`已删除「${p.displayName}」`)).catch((e) => toast(String(e), true));
-    };
+    del.onclick = () => deletePet(p);
     more.append(del);
   }
 
