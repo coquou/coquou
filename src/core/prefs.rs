@@ -37,8 +37,9 @@ pub enum Activity {
 
 /// Size multipliers the UI offers; anything else is rejected.
 pub const SIZES: [f64; 5] = [0.75, 1.0, 1.3, 1.6, 2.0];
-/// Longest "doze off after" delay accepted, in seconds (0 = never).
-const MAX_SLEEP_AFTER: u32 = 3600;
+/// "Doze off after" delays the UI offers, in seconds (0 = never); anything
+/// else is rejected, and older saved values snap to the nearest one.
+pub const SLEEP_CHOICES: [u32; 3] = [30, 1800, 0];
 /// Longest pet name the user may give, in characters.
 const MAX_NAME_CHARS: usize = 24;
 
@@ -87,7 +88,7 @@ impl Default for Prefs {
             custom: BTreeMap::new(),
             zone: Zone::default(),
             activity: Activity::default(),
-            sleep_after: 45,
+            sleep_after: 30,
             chatter: true,
             first_run_done: false,
             welcome_dismissed: false,
@@ -175,8 +176,8 @@ impl Patch {
                 return Err(format!("unsupported size {}", s.value));
             }
         }
-        if self.sleep_after.is_some_and(|s| s > MAX_SLEEP_AFTER) {
-            return Err("sleepAfter is too large".into());
+        if self.sleep_after.is_some_and(|s| !SLEEP_CHOICES.contains(&s)) {
+            return Err("sleepAfter is not one of the offered delays".into());
         }
         if let Some(c) = &self.custom {
             c.check()?;
@@ -217,7 +218,8 @@ impl Patch {
 }
 
 impl Prefs {
-    /// Settings from before the built-in cat became the preset 团团.
+    /// Settings saved by older versions: the built-in cat became the preset
+    /// 团团, and the doze-off delays changed to 30 s / 30 min / never.
     pub fn upgrade(&mut self) {
         const OLD: &str = "builtin";
         const NEW: &str = "preset:tuantuan";
@@ -226,6 +228,10 @@ impl Prefs {
         }
         if let Some(size) = self.sizes.remove(OLD) {
             self.sizes.insert(NEW.into(), size);
+        }
+        if !SLEEP_CHOICES.contains(&self.sleep_after) {
+            let s = self.sleep_after;
+            self.sleep_after = SLEEP_CHOICES.into_iter().filter(|&c| c > 0).min_by_key(|&c| c.abs_diff(s)).unwrap_or(0);
         }
     }
 }
@@ -316,7 +322,7 @@ mod tests {
         let p: Prefs = serde_json::from_str(r#"{ "zone": "left" }"#).unwrap();
         assert_eq!(p.zone, Zone::Left);
         assert_eq!(p.activity, Activity::Normal);
-        assert_eq!(p.sleep_after, 45);
+        assert_eq!(p.sleep_after, 30);
         assert!(p.chatter);
     }
 
@@ -331,6 +337,9 @@ mod tests {
         assert!(p.sizes.is_empty());
         assert!(patch(r#"{ "size": { "pet": "x", "value": 7 } }"#).unwrap().apply(&mut p).is_err());
         assert!(patch(r#"{ "sleepAfter": 99999 }"#).unwrap().apply(&mut p).is_err());
+        assert!(patch(r#"{ "sleepAfter": 45 }"#).unwrap().apply(&mut p).is_err());
+        patch(r#"{ "sleepAfter": 1800 }"#).unwrap().apply(&mut p).unwrap();
+        assert_eq!(p.sleep_after, 1800);
         assert!(patch(r#"{ "zone": "middle" }"#).is_err());
         assert!(patch(r#"{ "bogus": 1 }"#).is_err());
     }
@@ -361,5 +370,14 @@ mod tests {
         p.upgrade();
         assert_eq!(p.pet.as_deref(), Some("preset:tuantuan"));
         assert_eq!(p.sizes.get("preset:tuantuan"), Some(&1.3));
+    }
+
+    #[test]
+    fn old_sleep_delays_snap_to_offered_ones() {
+        for (old, new) in [(20, 30), (45, 30), (120, 30), (300, 30), (1200, 1800), (3600, 1800), (0, 0)] {
+            let mut p: Prefs = serde_json::from_str(&format!(r#"{{ "sleepAfter": {old} }}"#)).unwrap();
+            p.upgrade();
+            assert_eq!(p.sleep_after, new, "{old}");
+        }
     }
 }

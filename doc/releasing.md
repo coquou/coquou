@@ -2,9 +2,9 @@
 
 Coquou 用 Tauri 官方的 `tauri-plugin-updater` 自动更新：
 
-- 应用启动 20 秒后检查一次，之后每 6 小时检查一次（设置 → 关于与更新 →「自动检查更新」可关）。
+- 应用启动 20 秒后检查一次，之后每 6 小时检查一次（主窗口 → 关于 →「自动检查更新」可关）。
 - 检查地址：`https://github.com/coquou/coquou/releases/latest/download/latest.json`，即 GitHub 上最新一个正式 Release 里的 `latest.json`。
-- 发现新版本时，宠物冒气泡提示，托盘出现「有新版本 x.y.z，查看更新…」，主窗口「关于与更新」显示更新说明。用户点「更新并重启」才会安装，**不会静默安装**。
+- 发现新版本时，宠物冒气泡提示，托盘出现「有新版本 x.y.z，查看更新…」，主窗口「关于」页显示更新说明。用户点「更新并重启」才会安装，**不会静默安装**。
 - 下载的更新包要用 `tauri.conf.json` 里的公钥验签，签名不对就拒绝安装。
 
 ## 密钥
@@ -53,7 +53,7 @@ export GH_TOKEN=$(gh auth token -u continuationcs)
    python3 src/tools/release.py publish
    ```
 
-产物都在 `out/<版本号>/`（不进仓库）。更新说明来自 Release 正文（`--notes` / `--notes-file`），会显示在主窗口「关于与更新」里。
+产物都在 `out/<版本号>/`（不进仓库）。更新说明来自 Release 正文（`--notes` / `--notes-file`），会显示在主窗口「关于」页里。
 
 ## macOS：让钥匙串在更新后不再弹框
 

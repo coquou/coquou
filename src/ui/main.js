@@ -31,7 +31,7 @@ const ACTIVITY = {
 };
 
 // Saved preferences (prefs.rs); defaults until `prefs_get` answers.
-let prefs = { zone: "corners", activity: "normal", sleepAfter: 45, chatter: true, sizes: {}, firstRunDone: true };
+let prefs = { zone: "corners", activity: "normal", sleepAfter: 30, chatter: true, sizes: {}, firstRunDone: true };
 const pause = () => { const [a, b] = ACTIVITY[prefs.activity].pause; return a + Math.random() * (b - a); };
 
 const pet = {

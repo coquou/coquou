@@ -21,7 +21,8 @@ const setSize = (v) => (ui.current ? setPrefs({ size: { pet: ui.current, value: 
 
 const SIZES = [["0.75", "小"], ["1", "标准"], ["1.3", "大"], ["1.6", "特大"], ["2", "超大"]];
 const ACTIVITIES = [["quiet", "安静"], ["normal", "正常"], ["lively", "活泼"]];
-const SLEEPS = [["20", "20 秒"], ["45", "45 秒"], ["120", "2 分钟"], ["300", "5 分钟"], ["0", "从不"]];
+// prefs.rs SLEEP_CHOICES
+const SLEEPS = [["30", "30 秒"], ["1800", "30 分钟"], ["0", "从不"]];
 const ZONES = [
   ["corners", "两边角落", "默认，左右下角来回", [[0, 26], [94, 120]]],
   ["right", "右下角", "只在右边", [[94, 120]]],
@@ -39,7 +40,7 @@ const CHIPS = [["idle", "待机"], ["running-right", "走路"], ["waving", "挥�
 document.documentElement.classList.add(platform === "macos" ? "mac" : platform);
 
 // Last `prefs` view: saved prefs + `current` (pet on screen) + its `size`.
-let ui = { current: "", size: 1, custom: {}, zone: "corners", activity: "normal", sleepAfter: 45, chatter: true, welcomeDismissed: true };
+let ui = { current: "", size: 1, custom: {}, zone: "corners", activity: "normal", sleepAfter: 30, chatter: true, welcomeDismissed: true };
 let pets = [];          // [{ key, id, displayName, source, ... }]
 let selected = null;    // key shown in the detail panel
 let filter = "all";
