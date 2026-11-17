@@ -21,7 +21,7 @@ pub struct PetEntry {
     pub id: String,
     /// The user's name for the pet (prefs `custom`), else its own.
     pub display_name: String,
-    /// The pet's own displayName from pet.json.
+    /// The pet's own name (`own_name`), in the interface language when it has one.
     pub own_name: String,
     /// Hidden by the user: left out of automatic pet choices and, in the app
     /// window, of the default list.
@@ -68,8 +68,26 @@ fn plain_name(name: &str) -> bool {
         && matches!(Path::new(name).components().collect::<Vec<_>>().as_slice(), [Component::Normal(_)])
 }
 
-/// Largest pet.json read while listing.
+/// Largest pet.json / coquou.json read while listing.
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
+
+fn read_small_json(path: &Path) -> Option<serde_json::Value> {
+    if std::fs::metadata(path).map_or(true, |m| m.len() > MAX_MANIFEST_BYTES) {
+        return None;
+    }
+    serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
+}
+
+/// A pet's own name in the interface language: the extension's
+/// `translations.<lang>.displayName`, else pet.json `displayName`, else its
+/// id (doc/pet-format.md).
+pub fn own_name(manifest: &serde_json::Value, ext: Option<&serde_json::Value>, id: &str) -> String {
+    ext.and_then(|e| e["translations"][crate::i18n::code()]["displayName"].as_str())
+        .or_else(|| manifest["displayName"].as_str())
+        .filter(|n| !n.trim().is_empty())
+        .unwrap_or(id)
+        .to_string()
+}
 
 fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
     let custom = crate::settings::get(app).prefs.custom;
@@ -83,14 +101,11 @@ fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
             if !plain_name(&name) {
                 continue;
             }
-            let manifest_path = entry.path().join("pet.json");
-            if std::fs::metadata(&manifest_path).map_or(true, |m| m.len() > MAX_MANIFEST_BYTES) {
-                continue;
-            }
-            let Ok(text) = std::fs::read_to_string(manifest_path) else { continue };
-            let Ok(manifest) = serde_json::from_str::<serde_json::Value>(&text) else { continue };
+            let Some(manifest) = read_small_json(&entry.path().join("pet.json")) else { continue };
             let id = manifest["id"].as_str().unwrap_or(&name).to_string();
-            let own_name = manifest["displayName"].as_str().unwrap_or(&id).to_string();
+            let ext_file = crate::install::EXT_FILES.iter().copied().find(|f| entry.path().join(f).is_file());
+            let ext = ext_file.and_then(|f| read_small_json(&entry.path().join(f)));
+            let own_name = own_name(&manifest, ext.as_ref(), &id);
             let key = format!("{source}:{name}");
             let mine = custom.get(&key);
             pets.push(PetEntry {
@@ -100,7 +115,7 @@ fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
                 id,
                 own_name,
                 source,
-                ext_file: crate::install::EXT_FILES.iter().copied().find(|f| entry.path().join(f).is_file()),
+                ext_file,
             });
         }
     }
@@ -159,7 +174,20 @@ pub fn read_pet_file(app: AppHandle, key: String, path: String) -> Result<tauri:
 
 #[cfg(test)]
 mod tests {
-    use super::plain_name;
+    use super::{own_name, plain_name};
+    use serde_json::json;
+
+    #[test]
+    fn own_name_prefers_the_translation() {
+        let manifest = json!({ "displayName": "团团" });
+        crate::i18n::apply(crate::i18n::Language::En);
+        let ext = json!({ "translations": { "en": { "displayName": "Tuantuan" } } });
+        assert_eq!(own_name(&manifest, Some(&ext), "tuantuan"), "Tuantuan");
+        assert_eq!(own_name(&manifest, Some(&json!({})), "tuantuan"), "团团");
+        assert_eq!(own_name(&json!({}), None, "tuantuan"), "tuantuan");
+        crate::i18n::apply(crate::i18n::Language::Zh);
+        assert_eq!(own_name(&manifest, Some(&ext), "tuantuan"), "团团");
+    }
 
     #[test]
     fn pet_names_are_single_plain_segments() {

@@ -79,10 +79,13 @@
     },
   };
   const defaultLines = (kind) => DEFAULT_LINES[lang][kind];
-  // A pet's own lines for one occasion in the interface language: its
-  // coquou.json `translations.<lang>.lines`, else its `lines`; null when it
-  // has none (doc/pet-format.md).
-  const petLines = (ext, kind) => ext?.translations?.[lang]?.lines?.[kind] ?? ext?.lines?.[kind] ?? null;
+  // A pet's own text in the interface language (doc/pet-format.md): its
+  // coquou.json `translations.<lang>` first, else the untranslated field.
+  // The name comes translated from Rust (`list_pets`, pets.rs `own_name`).
+  const translation = (ext) => ext?.translations?.[lang];
+  // Lines for one occasion; null when the pet has none.
+  const petLines = (ext, kind) => translation(ext)?.lines?.[kind] ?? ext?.lines?.[kind] ?? null;
+  const petDescription = (manifest, ext) => translation(ext)?.description ?? manifest?.description ?? "";
 
   // ---------- Codex atlas ----------
   // doc/pet-format.md: 8 columns of 192×208 cells; v1 has 9 rows, v2 11
@@ -140,7 +143,7 @@
   }
 
   window.Coquou = {
-    mirrorConsole, t, setLang, platform, keystore, defaultLines, petLines,
+    mirrorConsole, t, setLang, platform, keystore, defaultLines, petLines, petDescription,
     CELL, COLS, ROWS, LOOK_ROWS, petImage, loadAtlas,
   };
 })();

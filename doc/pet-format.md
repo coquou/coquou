@@ -112,6 +112,8 @@ PNG 或 WebP，透明背景。行定义：
   },
   "translations": {
     "en": {
+      "displayName": "Clementine",
+      "description": "A round orange cat",
       "lines": { "click": ["What's up?", "Hey!"], "idle": ["Remember to drink water"] }
     }
   }
@@ -128,7 +130,7 @@ PNG 或 WebP，透明背景。行定义：
 | `facing` | 待机等没有方向的动作，原图朝哪边：`right`、`left` 或 `front`（正面）。Coquou 让停下来的宠物面朝屏幕中间，需要时把这些动作左右镜像；`front` 不镜像。两行走路本身有方向，不受影响 | 自动：比较 idle 首帧和两行走路首帧的轮廓，差别不明显时按 `front` |
 | `states.<name>` | 新增或覆盖一个动画状态 | — |
 | `lines` | 台词气泡，按场合分组，见下表 | 内置的通用台词（跟随界面语言） |
-| `translations.<语言>` | 其他界面语言下用的内容，见下文「多语言台词」 | — |
+| `translations.<语言>` | 其他界面语言下用的名字、简介和台词，见下文「多语言」 | — |
 
 `states.<name>` 字段：
 
@@ -156,7 +158,15 @@ PNG 或 WebP，透明背景。行定义：
 
 用户在主窗口改过的台词（以及名字）存在 Coquou 的设置里，按场合覆盖宠物自带的（不分语言），不会写回宠物文件。
 
-**多语言台词**：`lines` 写宠物的主语言；其他语言的台词放在 `translations.<语言>.lines`，结构和 `lines` 相同。语言用小写的 2–3 个字母代码，Coquou 目前用 `zh`（中文）和 `en`（英文）。说话时按场合依次取：当前界面语言的 `translations` → `lines` → 内置通用台词，所以翻译可以只写一部分场合。安装时校验：最多 16 种语言，每种的台词和 `lines` 规则一样；条目里的其他字段留给以后的格式版本，现在忽略。Codex 不读 `coquou.json`，不受影响。
+**多语言**：`pet.json` 的 `displayName`、`description` 和 `coquou.json` 的 `lines` 写宠物的主语言；其他语言放在 `coquou.json` 的 `translations.<语言>` 里，每项都可省略：
+
+| 字段 | 说明 |
+|---|---|
+| `displayName` | 这种语言下的名字，最多 64 个字 |
+| `description` | 这种语言下的简介，最多 500 个字 |
+| `lines` | 这种语言下的台词，结构和规则同 `lines`；按场合取，缺的场合用 `lines`，再缺用内置通用台词 |
+
+语言用小写的 2–3 个字母代码，Coquou 目前用 `zh`（中文）和 `en`（英文）；当前界面语言没有翻译时用原文。安装时校验：最多 16 种语言；条目里的其他字段留给以后的格式版本，现在忽略。翻译只放在 `coquou.json` 里、`pet.json` 保持原样，所以 Codex 照常读到原文，兼容不受影响。
 
 ## 4. 运行时状态 → 动画（降级规则）
 

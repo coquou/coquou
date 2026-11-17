@@ -38,6 +38,8 @@
   },
   "translations": {
     "en": {
+      "displayName": "Tuantuan",
+      "description": "A round little orange cat with three small stripes on the forehead.",
       "lines": {
         "hello": [
           "Tuantuan is here!",

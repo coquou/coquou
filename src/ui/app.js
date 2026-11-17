@@ -9,7 +9,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
 
-const { ROWS, CELL, platform, defaultLines, petLines, t } = window.Coquou;
+const { ROWS, CELL, platform, defaultLines, petLines, petDescription, t } = window.Coquou;
 window.Coquou.mirrorConsole("app");
 const $ = (id) => document.getElementById(id);
 const usePet = (key) => emit("pet-command", "pet:" + key);
@@ -243,7 +243,7 @@ async function renderDetail() {
   use.onclick = () => { if (!current) usePet(p.key); };
 
   const ext = a?.ext || {};
-  const desc = a?.manifest?.description || "";
+  const desc = petDescription(a?.manifest, ext);
   const mine = ui.custom?.[p.key] || {};
 
   // Name: edited in place; empty (or the pet's own name) goes back to its own.
@@ -511,9 +511,7 @@ listen("update-progress", ({ payload }) => {
 // After a language change: redraw everything scripts wrote (common.js has
 // already swapped the page's static text).
 function relabel() {
-  renderFilters();
-  renderGrid();
-  renderDetail();
+  loadPets(); // names can be translated (pets.rs own_name); redraws filters, grid, detail
   renderWelcome();
   renderBehaviour();
   if (updateStatus) renderUpdate(updateStatus);

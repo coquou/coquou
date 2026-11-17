@@ -212,9 +212,10 @@ fn parse_lines(value: &serde_json::Value) -> Result<Lines, String> {
     serde_json::from_value(value.clone()).map_err(|_| tr!("coquou.json 的 lines 必须是 { 场合: [字符串…] }", "lines in coquou.json must be { occasion: [string…] }").to_string())
 }
 
-/// `translations`: { "<language>": { "lines": … } }, a language being a
-/// lowercase 2–3 letter code such as "en" or "zh" (doc/pet-format.md).
-/// Other fields of an entry are left for later format versions.
+/// `translations`: { "<language>": { "displayName"?, "description"?, "lines"? } },
+/// a language being a lowercase 2–3 letter code such as "en" or "zh"
+/// (doc/pet-format.md). Other fields of an entry are left for later format
+/// versions.
 fn check_translations(value: &serde_json::Value) -> Result<(), String> {
     const MAX_LANGUAGES: usize = 16;
     let shape = || {
@@ -238,7 +239,17 @@ fn check_translations(value: &serde_json::Value) -> Result<(), String> {
                 format!("Invalid language code in translations in coquou.json: \"{language}\" (use lowercase codes like en or zh)")
             ));
         }
-        if let Some(lines) = entry.as_object().ok_or_else(shape)?.get("lines") {
+        let entry = entry.as_object().ok_or_else(shape)?;
+        for (field, max) in [("displayName", 64), ("description", 500)] {
+            let Some(value) = entry.get(field) else { continue };
+            if !value.as_str().is_some_and(|s| s.chars().count() <= max) {
+                return Err(tr!(
+                    format!("coquou.json 的 translations.{language}.{field} 必须是最多 {max} 个字的字符串"),
+                    format!("translations.{language}.{field} in coquou.json must be a string of at most {max} characters")
+                ));
+            }
+        }
+        if let Some(lines) = entry.get("lines") {
             check_lines(&parse_lines(lines)?)?;
         }
     }
@@ -264,7 +275,6 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
             format!("Invalid id in pet.json: \"{id}\" (letters, digits, - and _ only)")
         ));
     }
-    let display_name = manifest["displayName"].as_str().unwrap_or(&id).to_string();
 
     let sheet = manifest["spritesheetPath"].as_str().unwrap_or("spritesheet.webp");
     if !safe_rel(sheet) {
@@ -283,6 +293,7 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
         ));
     }
 
+    let mut ext_value = None;
     if let Some(text) = EXT_FILES.iter().find_map(|f| read_json_text(&dir.join(f))) {
         let ext: serde_json::Value =
             serde_json::from_str(&text?).map_err(|e| tr!(format!("coquou.json 格式错误：{e}"), format!("coquou.json is malformed: {e}")))?;
@@ -319,7 +330,9 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
                 }
             }
         }
+        ext_value = Some(ext);
     }
+    let display_name = pets::own_name(&manifest, ext_value.as_ref(), &id);
     Ok((id, display_name))
 }
 
@@ -487,6 +500,9 @@ mod tests {
         assert!(check_translations(&json!({ "EN": { "lines": {} } })).is_err());
         assert!(check_translations(&json!({ "../x": { "lines": {} } })).is_err());
         assert!(check_translations(&json!({ "en": { "lines": { "click": [1] } } })).is_err());
+        assert!(check_translations(&json!({ "en": { "displayName": "Tuantuan", "description": "A cat." } })).is_ok());
+        assert!(check_translations(&json!({ "en": { "displayName": 1 } })).is_err());
+        assert!(check_translations(&json!({ "en": { "description": "x".repeat(501) } })).is_err());
     }
 
     #[test]

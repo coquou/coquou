@@ -93,7 +93,7 @@ target/ / gen/           编译输出（不进仓库）
 ### 状态与偏好
 
 - 宠物偏好（当前宠物、各宠物大小、各宠物的自定义名字 / 台词 / 隐藏、活动范围、活跃程度、自动睡觉、说话、首次启动标记）由 `prefs.rs` 管理，和应用设置一起存在 `<应用配置目录>/settings.json`。主窗口用 `prefs_set` 修改，变化以 `prefs` 事件广播，桌宠窗口照着应用。
-- 自定义（`custom`）只存在偏好里、不改宠物文件，所以只读的预设和 Codex 宠物也能改。`list_pets` 返回的 `displayName` 已经套用了自定义名字（`ownName` 是宠物自己的），台词由桌宠窗口按「自定义 → coquou.json（当前语言的 `translations`，再到 `lines`）→ 通用台词」取用；隐藏的宠物只在没有别的可选时才会被自动选中。
+- 自定义（`custom`）只存在偏好里、不改宠物文件，所以只读的预设和 Codex 宠物也能改。`list_pets` 返回的 `displayName` 已经套用了自定义名字（`ownName` 是宠物自己的，有当前界面语言的 `translations` 时用译名），台词由桌宠窗口按「自定义 → coquou.json（当前语言的 `translations`，再到 `lines`）→ 通用台词」取用；隐藏的宠物只在没有别的可选时才会被自动选中。
 - 「桌面上正在显示哪只宠物」是运行时状态（`report_current_pet`）：记住的宠物不存在时，桌宠会临时换一只，但不改掉用户的选择。
 - 换宠物要先加载素材，所以走桌宠窗口：主窗口发 `pet-command`（`pet:<key>`），托盘菜单发 `reset`、`sleep`。
 - 右键宠物弹出托盘菜单，但不含「退出」（`show_pet_menu`，只接受桌宠窗口调用），点击结果同样走 `tray::on_menu`。
