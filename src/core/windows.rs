@@ -86,8 +86,11 @@ pub fn open_hatch_selftest<R: Runtime>(app: &AppHandle<R>, cfg: serde_json::Valu
     open_app_with(app, Some("hatch"), Some(format!("window.__COQUOU_SELFTEST__ = {cfg};")));
 }
 
+/// Async on purpose: Tauri runs synchronous commands on the main thread, and
+/// on Windows building a webview window from there deadlocks the event loop
+/// (the overlay's first-run `open_window("app")` froze the app).
 #[tauri::command]
-pub fn open_window(app: AppHandle, name: String) -> Result<(), String> {
+pub async fn open_window(app: AppHandle, name: String) -> Result<(), String> {
     match name.as_str() {
         "app" => open_app(&app, None),
         "pets-dir" => {
