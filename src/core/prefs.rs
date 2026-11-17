@@ -88,7 +88,7 @@ impl Default for Prefs {
             custom: BTreeMap::new(),
             zone: Zone::default(),
             activity: Activity::default(),
-            sleep_after: 30,
+            sleep_after: 1800,
             chatter: true,
             first_run_done: false,
             welcome_dismissed: false,
@@ -322,7 +322,7 @@ mod tests {
         let p: Prefs = serde_json::from_str(r#"{ "zone": "left" }"#).unwrap();
         assert_eq!(p.zone, Zone::Left);
         assert_eq!(p.activity, Activity::Normal);
-        assert_eq!(p.sleep_after, 30);
+        assert_eq!(p.sleep_after, 1800);
         assert!(p.chatter);
     }
 
