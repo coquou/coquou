@@ -182,11 +182,8 @@ pub fn delete_pet(app: AppHandle, key: String) -> Result<(), String> {
     if !key.starts_with("coquou:") {
         return Err(tr!("只能删除安装到 Coquou 的宠物", "Only pets installed in Coquou can be deleted").into());
     }
+    // A real directory directly inside the Coquou pets folder (pet_dir refuses links).
     let dir = crate::pets::pet_dir(&app, &key)?;
-    let root = crate::pets::coquou_root(&app).and_then(|r| r.canonicalize().ok()).ok_or(tr!("找不到宠物文件夹", "Cannot find the pets folder"))?;
-    if dir.parent() != Some(root.as_path()) {
-        return Err(tr!("宠物路径不对", "Wrong pet path").into());
-    }
     std::fs::remove_dir_all(&dir).map_err(|e| tr!(format!("删除失败：{e}"), format!("Could not delete: {e}")))?;
     log::info!("deleted {key}");
     crate::prefs::forget_pet(&app, &key);

@@ -122,39 +122,63 @@ fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
     pets
 }
 
-/// Canonical directory of the pet identified by `key` ("<source>:<dir name>"),
-/// which must be a direct child of that source's root.
+/// Directory of the pet identified by `key` ("<source>:<dir name>"): a direct
+/// child of that source's root, and not a link.
 pub fn pet_dir<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, String> {
     let (source, name) = key.split_once(':').ok_or("bad pet key")?;
-    if !plain_name(name) {
-        return Err("bad pet key".into());
-    }
     let root = roots(app)
         .into_iter()
         .find(|(s, _)| *s == source)
         .map(|(_, r)| r)
         .ok_or("unknown pet source")?;
-    let root = root.canonicalize().map_err(|e| e.to_string())?;
-    let dir = root.join(name).canonicalize().map_err(|e| e.to_string())?;
-    if dir.parent() != Some(root.as_path()) {
-        return Err("bad pet key".into());
+    child_dir(&root, name).map_err(|e| format!("bad pet key: {e}"))
+}
+
+/// `root/name` for a plain `name`, if it is a real directory.
+fn child_dir(root: &Path, name: &str) -> Result<PathBuf, String> {
+    if !plain_name(name) {
+        return Err("not a plain name".into());
+    }
+    let dir = root.join(name);
+    if !no_link(&dir)?.is_dir() {
+        return Err("not a directory".into());
     }
     Ok(dir)
 }
 
 /// Resolve `path` inside the pet identified by `key`, refusing anything that
-/// could escape the pet's directory (absolute paths, `..`, symlinks out).
+/// could escape the pet's directory (absolute paths, `..`, links).
 fn resolve<R: Runtime>(app: &AppHandle<R>, key: &str, path: &str) -> Result<PathBuf, String> {
+    inside(&pet_dir(app, key)?, path)
+}
+
+/// `dir/path` where `path` is made of plain components, none of them a link.
+///
+/// Links are refused rather than resolved and compared by prefix: resolving
+/// (`canonicalize`) also follows reparse points that are not links, such as
+/// the per-package copies Windows makes of AppData files written from inside
+/// a packaged (MSIX) app, and those resolve outside `dir` although nothing
+/// escapes, which made every pet there fail to load.
+fn inside(dir: &Path, path: &str) -> Result<PathBuf, String> {
     let rel = Path::new(path);
     if path.is_empty() || !rel.components().all(|c| matches!(c, Component::Normal(_))) {
         return Err(format!("illegal path: {path}"));
     }
-    let dir = pet_dir(app, key)?;
-    let file = dir.join(rel).canonicalize().map_err(|e| format!("{path}: {e}"))?;
-    if !file.starts_with(&dir) {
-        return Err(format!("illegal path: {path}"));
+    let mut file = dir.to_path_buf();
+    for part in rel.components() {
+        file.push(part);
+        no_link(&file).map_err(|e| format!("{path}: {e}"))?;
     }
     Ok(file)
+}
+
+/// Metadata of `p` itself, failing if it is a symlink or junction.
+fn no_link(p: &Path) -> Result<std::fs::Metadata, String> {
+    let meta = std::fs::symlink_metadata(p).map_err(|e| e.to_string())?;
+    if meta.file_type().is_symlink() {
+        return Err("links are not allowed".into());
+    }
+    Ok(meta)
 }
 
 #[tauri::command]
@@ -174,8 +198,64 @@ pub fn read_pet_file(app: AppHandle, key: String, path: String) -> Result<tauri:
 
 #[cfg(test)]
 mod tests {
-    use super::{own_name, plain_name};
+    use super::{child_dir, inside, own_name, plain_name};
     use serde_json::json;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    fn temp_root(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("coquou-pets-{tag}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("pet/sub")).unwrap();
+        fs::write(dir.join("pet/pet.json"), "{}").unwrap();
+        fs::write(dir.join("pet/sub/a.png"), "x").unwrap();
+        dir
+    }
+
+    /// A directory link (a junction on Windows, which needs no privileges).
+    fn link_dir(target: &Path, link: &Path) {
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).unwrap();
+        #[cfg(windows)]
+        assert!(std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(link)
+            .arg(target)
+            .output()
+            .unwrap()
+            .status
+            .success());
+    }
+
+    #[test]
+    fn files_inside_a_pet_resolve() {
+        let root = temp_root("ok");
+        let pet = child_dir(&root, "pet").unwrap();
+        assert_eq!(pet, root.join("pet"));
+        assert_eq!(inside(&pet, "pet.json").unwrap(), pet.join("pet.json"));
+        assert_eq!(inside(&pet, "sub/a.png").unwrap(), pet.join("sub").join("a.png"));
+        for bad in ["", "..", "../x", "/etc/passwd", "sub/../pet.json", "C:\\x"] {
+            assert!(inside(&pet, bad).is_err(), "{bad}");
+        }
+        assert!(inside(&pet, "missing.png").is_err());
+        assert!(child_dir(&root, "missing").is_err());
+        assert!(child_dir(&root, "pet/pet.json").is_err());
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn links_are_refused() {
+        let root = temp_root("link");
+        let outside = temp_root("outside");
+        link_dir(&outside.join("pet"), &root.join("linked"));
+        link_dir(&outside.join("pet"), &root.join("pet").join("out"));
+        assert!(child_dir(&root, "linked").is_err());
+        let pet = child_dir(&root, "pet").unwrap();
+        assert!(inside(&pet, "out/pet.json").is_err());
+        assert!(inside(&pet, "out").is_err());
+        fs::remove_dir_all(&root).unwrap();
+        fs::remove_dir_all(&outside).unwrap();
+    }
 
     #[test]
     fn own_name_prefers_the_translation() {

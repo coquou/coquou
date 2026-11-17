@@ -35,7 +35,7 @@ Coquou 是一个开源桌面宠物（macOS / Windows），基于 Tauri 2：Rust 
 - `cargo clippy --all-targets` 必须零警告，`cargo test` 必须全部通过。
 - 跨平台代码用 `#[cfg(target_os = ...)]` 分开实现；macOS 和 Windows 都要能编译。
 - IPC 命令保持最小：只暴露页面确实需要的能力，参数在 Rust 侧校验。
-  - 读写文件的命令必须限定在固定目录内（参考 `pets::resolve`：只接受普通路径分量，`canonicalize` 后检查前缀）。
+  - 读写文件的命令必须限定在固定目录内（参考 `pets::resolve`：只接受普通路径分量，逐级拒绝符号链接和目录联接）。不要用 `canonicalize` 后比前缀：Windows 上它会把不是链接的重解析点（比如 MSIX 应用里 AppData 的虚拟化副本）也解析到别处，合法文件会被误判越界。
   - 不提供「按任意路径读文件」的命令；拖放进来的文件只能按刚拖入的那几个路径读取（`library::Dropped`）。
   - 安装宠物包要限制文件数、单文件大小和总大小，防止路径穿越和符号链接。
   - 打开链接只用固定列表（`windows::open_link`）。
