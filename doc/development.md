@@ -28,6 +28,12 @@ npx @tauri-apps/cli@2 build --debug --bundles app   # 打一个调试版应用�
 | macOS | `~/Library/Logs/io.github.coquou/Coquou.log` |
 | Windows | `%LOCALAPPDATA%\io.github.coquou\logs\Coquou.log` |
 
+Windows 上，从打包成 MSIX 的应用里启动的 Coquou（比如在 Claude 桌面版的会话里 `cargo run` 或运行安装版）也算在那个应用的包里：写 AppData 和 HKCU 都会被重定向到 `%LOCALAPPDATA%\Packages\<包名>\LocalCache\...`。所以：
+
+- 在那里看到的日志、`settings.json` 和宠物只是包里的副本，不是从开始菜单或资源管理器启动的 Coquou 用的那份。
+- 包里的副本早就记了首次启动已完成，首次运行的流程（自动打开主窗口等）在那里测不出来。要验证首次运行或用户真实的表现，请从资源管理器安装和启动。
+- 判断一个进程是不是卡死，可以对它的窗口调 Win32 `IsHungAppWindow`。卡死时页面不会再写日志，日志文件里看不出来。
+
 开发用的启动参数：
 
 | 参数 | 作用 |
