@@ -81,18 +81,18 @@ AI 接口的 key 存在钥匙串里。没有固定签名身份时，每次更新
 不用发 Release，也能在本机模拟一次完整更新（只在调试版可用：允许 http 地址，并能自动安装）：
 
 ```bash
-# 1) 打一个 0.1.0 调试包，复制到别处当「已安装」的版本
+# 1) 打一个当前版本（0.0.1）的调试包，复制到别处当「已安装」的版本
 npx @tauri-apps/cli@2 build --debug --bundles app
 cp -R target/debug/bundle/macos/Coquou.app /tmp/coquou-e2e/
-# 2) 打一个带签名的 0.1.1 更新包
+# 2) 打一个带签名的 0.0.2 更新包
 TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.tauri/coquou-updater.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD="" \
-  npx @tauri-apps/cli@2 build --debug --bundles app --config '{"version":"0.1.1","bundle":{"createUpdaterArtifacts":true}}'
+  npx @tauri-apps/cli@2 build --debug --bundles app --config '{"version":"0.0.2","bundle":{"createUpdaterArtifacts":true}}'
 # 3) 用 Coquou.app.tar.gz 和 .sig 写一个 latest.json，用 python3 -m http.server 提供出来，然后：
 COQUOU_UPDATE_URL=http://127.0.0.1:8899/latest.json COQUOU_UPDATE_AUTOINSTALL=1 \
   /tmp/coquou-e2e/Coquou.app/Contents/MacOS/Coquou
 ```
 
-日志里依次出现 `update available: 0.1.0 → 0.1.1`、`update installed, restarting`，`/tmp/coquou-e2e/Coquou.app` 的版本变成 0.1.1。把更新包改坏后再试，应当出现 `signature verification failed`，并且不会安装。
+日志里依次出现 `update available: 0.0.1 → 0.0.2`、`update installed, restarting`，`/tmp/coquou-e2e/Coquou.app` 的版本变成 0.0.2。把更新包改坏后再试，应当出现 `signature verification failed`，并且不会安装。
 
 ## 仓库与旧名
 
