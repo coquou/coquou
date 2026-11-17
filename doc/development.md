@@ -60,8 +60,11 @@ src/
     system.rs            全屏与电池检测（macOS / Windows 各一套）
     update.rs            自动更新
     migrate.rs           从旧名 Perchy / Pipkin 迁移数据
+    fsutil.rs            原子写入与容错的 JSON 读取
+    sync.rs              共享状态加锁
     build.rs             构建脚本；capabilities/ 是窗口权限
   ui/                    前端（纯静态文件）
+    common.js            两个窗口共用：日志、平台、Codex 图集常量与读取宠物
     index.html / main.js 桌宠窗口：状态机、物理、命中检测、台词气泡、通用反应（拎起摇摆、落地压扁）
     sprite.js            Codex 图集 + coquou.json 渲染器（所有宠物都走它）
     app.html / app.css / app.js   主窗口

@@ -43,7 +43,7 @@ my-pet/
 - 最多 256 个文件，单文件 ≤ 32 MB，总计 ≤ 96 MB（按实际解压大小计）；
 - `id` 只能含字母、数字、`-`、`_`（≤ 64 字符）；
 - 精灵图必须是 PNG/WebP 且尺寸符合 Codex v1/v2；
-- `coquou.json` 必须是合法 JSON，引用的额外精灵图必须存在。
+- `coquou.json` 必须是合法 JSON，引用的额外精灵图必须存在，`hd` 图集必须是主图集的 2–4 倍，`facing` 只能是规定的取值，台词不超过下文的上限。
 
 ## 1. `pet.json`（Codex 兼容层）
 
@@ -173,6 +173,7 @@ PNG 或 WebP，透明背景。行定义：
 |---|---|---|
 | `coquou` | macOS `~/Library/Application Support/io.github.coquou/pets/`，Windows `%APPDATA%\io.github.coquou\pets\` | Coquou 自己的宠物 |
 | `codex` | `${CODEX_HOME:-~/.codex}/pets/` | 原地只读，不修改 Codex 目录 |
+| `preset` | 应用包内的 `presets/` | 随应用打包的预设宠物，只读 |
 
 ## 6. 安全约束
 
