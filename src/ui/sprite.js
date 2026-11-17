@@ -157,7 +157,7 @@ async function loadSpritePet(entry) {
     S, FOOT: Math.ceil((ch - anchor.y) * scale) + 8,
     width: box.w * scale,
     height: (anchor.y - box.top) * scale,
-    lines: ext?.lines || null,
+    ownLines: (kind) => window.Coquou.petLines(ext, kind), // coquou.json lines, per language
     has, // the overlay skips its own effect where the pet has an animation
     draw,
   };

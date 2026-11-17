@@ -9,7 +9,7 @@
 const { invoke } = window.__TAURI__.core;
 const { listen, emit } = window.__TAURI__.event;
 
-const { ROWS, CELL, platform, defaultLines, t } = window.Coquou;
+const { ROWS, CELL, platform, defaultLines, petLines, t } = window.Coquou;
 window.Coquou.mirrorConsole("app");
 const $ = (id) => document.getElementById(id);
 const usePet = (key) => emit("pet-command", "pet:" + key);
@@ -267,7 +267,7 @@ async function renderDetail() {
   };
 
   // Lines: one per row; only occasions that differ from the pet's own are saved.
-  const ownLines = (kind) => ext.lines?.[kind] ?? defaultLines(kind);
+  const ownLines = (kind) => petLines(ext, kind) ?? defaultLines(kind);
   const areas = {};
   const linesBox = el("details", { className: "lines", open: linesOpen },
     el("summary", { textContent: mine.lines ? t("台词（已改过）", "Lines (edited)") : t("台词", "Lines") }));

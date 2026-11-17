@@ -17,7 +17,7 @@ const ctx = stage.getContext("2d");
 // The pet is drawn into a small sprite buffer first; hit tests read alpha
 // from this buffer, so only opaque pet pixels catch the mouse.
 // Nothing is drawn until the first pet has loaded (renderers: sprite.js).
-const NO_PET = { name: "", S: 1, FOOT: 0, width: 0, height: 0, lines: null, has: () => false, draw() {} };
+const NO_PET = { name: "", S: 1, FOOT: 0, width: 0, height: 0, ownLines: () => null, has: () => false, draw() {} };
 let renderer = NO_PET;
 const buf = document.createElement("canvas");
 const bctx = buf.getContext("2d", { willReadFrequently: true });
@@ -208,7 +208,7 @@ function chat(kind, force = false) {
   if (bubble || bubbleQueue.length) return;
   if (!force && clock - lastChat < CHAT_GAP) return;
   // The user's lines (prefs `custom`), else the pet's own (coquou.json), else the defaults.
-  const pool = prefs.custom?.[petKey]?.lines?.[kind] ?? renderer.lines?.[kind] ?? defaultLines(kind);
+  const pool = prefs.custom?.[petKey]?.lines?.[kind] ?? renderer.ownLines(kind) ?? defaultLines(kind);
   if (!pool?.length) return;
   lastChat = clock;
   bubble = { text: pool[Math.floor(Math.random() * pool.length)], until: clock + 3.2 };

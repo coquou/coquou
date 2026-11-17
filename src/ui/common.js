@@ -79,6 +79,10 @@
     },
   };
   const defaultLines = (kind) => DEFAULT_LINES[lang][kind];
+  // A pet's own lines for one occasion in the interface language: its
+  // coquou.json `translations.<lang>.lines`, else its `lines`; null when it
+  // has none (doc/pet-format.md).
+  const petLines = (ext, kind) => ext?.translations?.[lang]?.lines?.[kind] ?? ext?.lines?.[kind] ?? null;
 
   // ---------- Codex atlas ----------
   // doc/pet-format.md: 8 columns of 192×208 cells; v1 has 9 rows, v2 11
@@ -136,7 +140,7 @@
   }
 
   window.Coquou = {
-    mirrorConsole, t, setLang, platform, keystore, defaultLines,
+    mirrorConsole, t, setLang, platform, keystore, defaultLines, petLines,
     CELL, COLS, ROWS, LOOK_ROWS, petImage, loadAtlas,
   };
 })();

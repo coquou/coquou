@@ -35,5 +35,37 @@
       "团团想吃小鱼干",
       "（打了个哈欠）"
     ]
+  },
+  "translations": {
+    "en": {
+      "lines": {
+        "hello": [
+          "Tuantuan is here!",
+          "Meow~ I'm here"
+        ],
+        "click": [
+          "Meow!",
+          "Hm?",
+          "Pets are fine, pokes are not, meow"
+        ],
+        "pet": [
+          "Purr purr~",
+          "So nice, meow~"
+        ],
+        "wake": [
+          "Meow… five more minutes",
+          "Hm?"
+        ],
+        "held": [
+          "Mrrow!",
+          "Put Tuantuan down!"
+        ],
+        "idle": [
+          "Time for a little break?",
+          "Tuantuan wants dried fish",
+          "(yawns)"
+        ]
+      }
+    }
   }
 }

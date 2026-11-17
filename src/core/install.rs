@@ -212,6 +212,39 @@ fn parse_lines(value: &serde_json::Value) -> Result<Lines, String> {
     serde_json::from_value(value.clone()).map_err(|_| tr!("coquou.json 的 lines 必须是 { 场合: [字符串…] }", "lines in coquou.json must be { occasion: [string…] }").to_string())
 }
 
+/// `translations`: { "<language>": { "lines": … } }, a language being a
+/// lowercase 2–3 letter code such as "en" or "zh" (doc/pet-format.md).
+/// Other fields of an entry are left for later format versions.
+fn check_translations(value: &serde_json::Value) -> Result<(), String> {
+    const MAX_LANGUAGES: usize = 16;
+    let shape = || {
+        tr!(
+            "coquou.json 的 translations 必须是 { 语言: { lines: … } }",
+            "translations in coquou.json must be { language: { lines: … } }"
+        )
+        .to_string()
+    };
+    let map = value.as_object().ok_or_else(shape)?;
+    if map.len() > MAX_LANGUAGES {
+        return Err(tr!(
+            format!("coquou.json 的 translations 最多 {MAX_LANGUAGES} 种语言"),
+            format!("translations in coquou.json can have at most {MAX_LANGUAGES} languages")
+        ));
+    }
+    for (language, entry) in map {
+        if !(2..=3).contains(&language.len()) || !language.bytes().all(|b| b.is_ascii_lowercase()) {
+            return Err(tr!(
+                format!("coquou.json 的 translations 里语言代码不合法：\"{language}\"（用 en、zh 这样的小写代码）"),
+                format!("Invalid language code in translations in coquou.json: \"{language}\" (use lowercase codes like en or zh)")
+            ));
+        }
+        if let Some(lines) = entry.as_object().ok_or_else(shape)?.get("lines") {
+            check_lines(&parse_lines(lines)?)?;
+        }
+    }
+    Ok(())
+}
+
 /// The extension file: `coquou.json`, or `perchy.json` from before the rename.
 pub const EXT_FILES: [&str; 2] = ["coquou.json", "perchy.json"];
 
@@ -270,6 +303,9 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
         }
         if let Some(lines) = ext.get("lines") {
             check_lines(&parse_lines(lines)?)?;
+        }
+        if let Some(translations) = ext.get("translations") {
+            check_translations(translations)?;
         }
         if let Some(states) = ext["states"].as_object() {
             for (name, state) in states {
@@ -439,6 +475,18 @@ mod tests {
         assert!(check(json!(["喵"])).is_err());
         assert!(check(json!({ "click": [1] })).is_err());
         assert!(check(json!({ "click": ["x".repeat(81)] })).is_err());
+    }
+
+    #[test]
+    fn translations_are_checked() {
+        use serde_json::json;
+        assert!(check_translations(&json!({ "en": { "lines": { "click": ["Meow!"] } } })).is_ok());
+        assert!(check_translations(&json!({ "en": {} })).is_ok());
+        assert!(check_translations(&json!(["en"])).is_err());
+        assert!(check_translations(&json!({ "en": ["Meow!"] })).is_err());
+        assert!(check_translations(&json!({ "EN": { "lines": {} } })).is_err());
+        assert!(check_translations(&json!({ "../x": { "lines": {} } })).is_err());
+        assert!(check_translations(&json!({ "en": { "lines": { "click": [1] } } })).is_err());
     }
 
     #[test]
