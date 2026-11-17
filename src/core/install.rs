@@ -253,6 +253,11 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
                 return Err(format!("coquou.json 的 hd 图集 {hd} 不存在，或不是主图集的 2–4 倍"));
             }
         }
+        if let Some(facing) = ext.get("facing") {
+            if !matches!(facing.as_str(), Some("left" | "right" | "front")) {
+                return Err("coquou.json 的 facing 只能是 left、right 或 front".into());
+            }
+        }
         if let Some(lines) = ext.get("lines") {
             check_lines(&parse_lines(lines)?)?;
         }
@@ -449,17 +454,33 @@ mod tests {
         assert!(many.add_file().is_err());
     }
 
-    #[test]
-    fn hd_outside_the_pet_is_rejected() {
+    /// The preset's pet.json and atlas with the given coquou.json, in a temp dir.
+    fn preset_with_ext(ext: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("coquou-test-{}", nonce()));
         let preset = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/assets/presets/tuantuan");
         fs::create_dir_all(&dir).unwrap();
         for f in ["pet.json", "spritesheet.png"] {
             fs::copy(preset.join(f), dir.join(f)).unwrap();
         }
-        fs::write(dir.join("coquou.json"), r#"{ "hd": "/dev/zero" }"#).unwrap();
+        fs::write(dir.join("coquou.json"), ext).unwrap();
+        dir
+    }
+
+    #[test]
+    fn hd_outside_the_pet_is_rejected() {
+        let dir = preset_with_ext(r#"{ "hd": "/dev/zero" }"#);
         let err = validate(&dir).unwrap_err();
         assert!(err.contains("hd"), "{err}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn facing_is_checked() {
+        let dir = preset_with_ext(r#"{ "facing": "up" }"#);
+        let err = validate(&dir).unwrap_err();
+        assert!(err.contains("facing"), "{err}");
+        fs::write(dir.join("coquou.json"), r#"{ "facing": "left" }"#).unwrap();
+        assert!(validate(&dir).is_ok());
         fs::remove_dir_all(&dir).unwrap();
     }
 

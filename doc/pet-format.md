@@ -96,6 +96,7 @@ PNG 或 WebP，透明背景。行定义：
   "scale": 0.6,
   "anchor": [96, 200],
   "hd": "spritesheet@2x.webp",
+  "facing": "right",
   "states": {
     "sleep": { "sheet": "extra/sleep.webp", "cell": [192, 208], "frames": 6, "fps": 3 },
     "held":  { "row": 6, "frames": 6, "durations": [150, 150, 150, 150, 150, 260] },
@@ -120,6 +121,7 @@ PNG 或 WebP，透明背景。行定义：
 | `scale` | 屏幕显示缩放 | 自动：可见身体高约 120px |
 | `anchor` | 脚底锚点（单元格像素坐标） | 自动：idle 首帧不透明区域的水平中心 + 最低行 |
 | `hd` | 主图集的高清版（布局相同，宽高都是 2–4 的整数倍），Coquou 在高分屏上用它绘制；Codex 忽略，仍用主图集 | — |
+| `facing` | 待机等没有方向的动作，原图朝哪边：`right`、`left` 或 `front`（正面）。Coquou 让停下来的宠物面朝屏幕中间，需要时把这些动作左右镜像；`front` 不镜像。两行走路本身有方向，不受影响 | 自动：比较 idle 首帧和两行走路首帧的轮廓，差别不明显时按 `front` |
 | `states.<name>` | 新增或覆盖一个动画状态 | — |
 | `lines` | 台词气泡，按场合分组，见下表 | 内置的通用台词 |
 | `sounds` | 音效（**预留，尚未实现**） | — |

@@ -36,7 +36,7 @@ const pause = () => { const [a, b] = ACTIVITY[prefs.activity].pause; return a + 
 
 const pet = {
   x: 300, y: -120, vx: 0, vy: 0,
-  facing: 1, state: "air", stateT: 0, nextDecision: 2,
+  facing: 1, face: 1, state: "air", stateT: 0, nextDecision: 2,
   blinkUntil: 0, nextBlink: 3, faceOverride: null, loved: 0,
   look: null, swing: 0, lastTouch: 0,
 };
@@ -54,7 +54,17 @@ function sizeBuffer() {
   buf.width = Math.round(renderer.S * dpr); buf.height = Math.round(renderer.S * dpr);
 }
 
-function setState(s) { pet.state = s; pet.stateT = 0; }
+// facing: the walk / flight direction. face: the way poses without a
+// direction of their own look (sprite.js mirrors them). Settling down, the
+// pet faces the middle of the screen, so in a corner it looks inward; near
+// the middle it keeps the way it was going.
+function setState(s) {
+  pet.state = s; pet.stateT = 0;
+  if (s !== "walk" && s !== "air") {
+    const d = W / 2 - pet.x;
+    pet.face = Math.abs(d) > W * 0.1 ? Math.sign(d) : pet.facing;
+  }
+}
 function touch(t) { pet.lastTouch = t; }
 function showFace(face, t, dur) { pet.faceOverride = { face, until: t + dur }; }
 
@@ -443,7 +453,7 @@ function think(t, dt) {
       pet.vy += GRAVITY * dt;
       pet.x += pet.vx * dt; pet.y += pet.vy * dt;
       pet.swing = Math.max(-0.4, Math.min(0.4, pet.vx / 3000));
-      if (Math.abs(pet.vx) > 30) pet.facing = Math.sign(pet.vx);
+      if (Math.abs(pet.vx) > 30) pet.facing = pet.face = Math.sign(pet.vx);
       if (pet.x < 50) { pet.x = 50; pet.vx = -pet.vx * 0.5; }
       if (pet.x > W - 50) { pet.x = W - 50; pet.vx = -pet.vx * 0.5; }
       if (pet.y < renderer.height + 10) { pet.y = renderer.height + 10; pet.vy = Math.abs(pet.vy) * 0.3; }

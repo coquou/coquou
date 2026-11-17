@@ -3,6 +3,7 @@
   "author": "Coquou contributors",
   "license": "CC-BY-4.0",
   "hd": "spritesheet@2x.png",
+  "facing": "right",
   "tags": [
     "preset",
     "ai-hatched"
