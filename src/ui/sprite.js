@@ -109,6 +109,8 @@ async function loadSpritePet(entry) {
     }
     if (p.loved > t) return { name: has("loved") ? "loved" : "waving" };
     if (p.happyUntil > t) return { name: has("happy") ? "happy" : "waving" };
+    if (p.sadUntil > t) return { name: "failed" };
+    if (p.task) return { name: p.task };
     if (version >= 2 && p.lookAngle != null) return { look: p.lookAngle };
     return { name: "idle" };
   }

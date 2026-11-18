@@ -469,6 +469,7 @@ pub async fn ai_generate(
 ) -> Result<String, String> {
     let profile = load(&app).into_iter().find(|p| p.id == profile_id).ok_or(tr!("找不到这个 AI 配置", "AI profile not found"))?;
     let key = get_key(&profile.id)?;
+    let _busy = crate::activity::begin(&app, crate::activity::Kind::Running);
     let started = std::time::Instant::now();
     let fell_back = AtomicBool::new(false);
     let call = |p: Profile| {

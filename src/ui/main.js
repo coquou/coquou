@@ -38,6 +38,7 @@ const pet = {
   x: 300, y: -120, vx: 0, vy: 0,
   facing: 1, face: 1, state: "air", stateT: 0, nextDecision: 2,
   happyUntil: 0, loved: 0, lookAngle: null, swing: 0, lastTouch: 0,
+  task: null, taskSince: 0, taskEnd: 0, sadUntil: 0, // see "activity" below
   target: null, // x the pet walks back to when it is outside its zone
 };
 
@@ -66,6 +67,9 @@ function setState(s) {
   }
 }
 function touch(t) { pet.lastTouch = t; }
+// Stop strolling or sleeping to pay attention (a walk back to the zone
+// resumes from idle on its own).
+function settle() { if (pet.state === "walk" || pet.state === "sleep") setState("idle"); }
 
 // ---------- particles (hearts, Zzz, !) ----------
 const particles = [];
@@ -330,7 +334,7 @@ listen("prefs", ({ payload }) => applyPrefs(payload));
 let dropHover = false;
 listen("drop-hover", ({ payload }) => {
   dropHover = payload;
-  if (payload) { touch(clock); if (pet.state === "walk" || pet.state === "sleep") setState("idle"); }
+  if (payload) { touch(clock); settle(); }
 });
 listen("pet-installed", async ({ payload }) => {
   touch(clock);
@@ -351,6 +355,27 @@ listen("pets-changed", async ({ payload }) => {
   await useFallback(await invoke("list_pets").catch(() => []), payload.removed);
 });
 
+// ---------- activity (activity.rs): what Coquou itself is busy with ----------
+// While the AI is generating, the pet works (`running`); while a pet package
+// is checked and installed, TA looks it over (`review`). Each event carries
+// the whole state, so one missed before this page listened is corrected by
+// the next. A task stays on screen at least TASK_MIN, so a quick install
+// shows a full loop instead of a flicker. Failures make the pet sad for a
+// moment (`failed`).
+const TASK_MIN = 1.5, SAD_FOR = 2.4; // s
+listen("pet-activity", ({ payload }) => {
+  const want = payload.running ? "running" : payload.review ? "review" : null;
+  if (want) {
+    if (pet.task !== want) { pet.task = want; pet.taskSince = clock; }
+    pet.taskEnd = Infinity;
+    touch(clock); settle();
+  } else if (pet.task) {
+    pet.taskEnd = Math.max(clock, pet.taskSince + TASK_MIN);
+  }
+});
+listen("pet-failed", () => sad());
+function sad() { pet.sadUntil = clock + SAD_FOR; touch(clock); settle(); }
+
 // ---------- pet switching ----------
 // Loading takes a moment; only the most recent request may take effect
 // (switching A then B quickly must end on B).
@@ -368,6 +393,7 @@ async function usePet(key, remember = true) {
     if (seq !== loadSeq) return false;
     console.error("failed to load pet", key, e);
     emit("?", "#ff6b6b", 28, pet.x, pet.y - renderer.height - 20, 0, -40, 1.2);
+    sad();
     return false;
   }
   if (seq !== loadSeq) return false; // superseded by a newer switch
@@ -410,6 +436,12 @@ function nearestHome(x) {
 // ---------- behaviour ----------
 function think(t, dt) {
   pet.stateT += dt;
+  // Done: linger a moment before strolling off, so the short gaps between
+  // one AI request and the next don't send the pet walking back and forth.
+  if (pet.task && t >= pet.taskEnd) {
+    pet.task = null;
+    if (pet.state === "idle") { pet.stateT = 0; pet.nextDecision = pause(); }
+  }
 
   // Pets with look rows (Codex v2) turn toward a recently moved, nearby
   // cursor. 0° = up, clockwise; a deadzone around the head falls back to idle.
@@ -426,6 +458,7 @@ function think(t, dt) {
   switch (pet.state) {
     case "idle":
       if (!zoneOf(pet.x)) { pet.target = nearestHome(pet.x); setState("walk"); break; }
+      if (pet.task) break; // stays put while busy
       if (prefs.sleepAfter > 0 && t - pet.lastTouch > prefs.sleepAfter && Math.random() < dt * 0.2) { setState("sleep"); break; }
       if (t > nextIdleChat) { nextIdleChat = t + 120 + Math.random() * 180; chat("idle"); }
       if (pet.stateT > pet.nextDecision) {
@@ -484,7 +517,7 @@ function petting(t, dt, hovering) {
     rub += Math.hypot(cursor[0] - lastRubPos[0], cursor[1] - lastRubPos[1]);
     if (rub > 700) {
       rub = 0; touch(t);
-      if (pet.state === "sleep" || pet.state === "walk") setState("idle");
+      settle();
       pet.loved = t + 2.5; hearts(4);
       chat("pet");
     }

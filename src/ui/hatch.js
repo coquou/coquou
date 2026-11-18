@@ -409,6 +409,11 @@ listen("pet-installed", loadHatched);
 listen("pets-changed", loadHatched);
 
 // ---------- generation ----------
+// A generation that finally failed makes the desktop pet sad for a moment
+// (main.js "activity"); the pet shows the requests themselves on its own
+// (activity.rs), but only this page knows when a failure is final.
+const petFailed = () => emit("pet-failed").catch((e) => console.warn("pet-failed", String(e)));
+
 async function generate(prompt, images, size) {
   const p = currentProfile();
   if (!p) throw new Error(t("请先保存一个 AI 接口配置", "Save an AI service profile first"));
@@ -449,6 +454,7 @@ async function genBase() {
   } catch (e) {
     setStatus(el, t("生成失败：", "Generation failed: ") + e, "bad");
     console.error("base failed", String(e));
+    petFailed();
     return false;
   } finally {
     $("genBase").disabled = false;
@@ -623,6 +629,7 @@ async function genRow(s, attempt = 1) {
     await new Promise((r) => setTimeout(r, window.__COQUOU_SELFTEST__ ? 200 : 3000));
     return genRow(s, attempt + 1);
   }
+  if (st.rows[s.id].status === "bad") petFailed();
   renderCards();
 }
 

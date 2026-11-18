@@ -18,6 +18,7 @@
 // First: the other modules use its `tr!` macro.
 #[macro_use]
 mod i18n;
+mod activity;
 mod ai;
 mod fsutil;
 mod hatch_run;
@@ -186,6 +187,7 @@ fn main() {
         .manage(overlay::GeometryState::default())
         .manage(overlay::MouseState::default())
         .manage(prefs::Current::default())
+        .manage(activity::Activity::default())
         .invoke_handler(tauri::generate_handler![
             overlay::cursor_local,
             overlay::set_passthrough,

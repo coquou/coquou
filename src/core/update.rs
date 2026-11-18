@@ -226,6 +226,7 @@ pub async fn update_install(app: AppHandle) -> Result<(), String> {
         }
         Err(e) => {
             log::warn!("update install failed: {e}");
+            crate::activity::failed(&app);
             let msg = friendly(&e.to_string());
             set(&app, |s| {
                 s.installing = false;

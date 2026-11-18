@@ -42,9 +42,14 @@ fn scratch<R: Runtime>(app: &AppHandle<R>, stem: &str, ext: &str) -> Result<Path
     Ok(dir.join(format!("{stem}-{}-{n}{ext}", std::process::id())))
 }
 
-/// Install one pet and announce it (`pet-installed`).
+/// Install one pet and announce it (`pet-installed`). Every install goes
+/// through here, so this is where the pet shows it checking the package and
+/// looks sad when it is refused.
 fn install_one<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<Installed, String> {
-    let done = install::install(app, path)?;
+    let busy = crate::activity::begin(app, crate::activity::Kind::Review);
+    let result = install::install(app, path);
+    drop(busy);
+    let done = result.inspect_err(|_| crate::activity::failed(app))?;
     log::info!("installed {} from {}", done.key, path.display());
     set_pending(app, done.key.clone());
     let _ = app.emit("pet-installed", done.clone());
