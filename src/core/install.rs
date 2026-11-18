@@ -256,6 +256,53 @@ fn check_translations(value: &serde_json::Value) -> Result<(), String> {
     Ok(())
 }
 
+/// `hatch`: what an AI hatch was made from, kept so the hatch page can load
+/// the pet again and regenerate parts of it (doc/pet-format.md). Images only:
+/// `base` (required), `reference`, and one raw sheet per entry of `rows`;
+/// rows without a sheet are taken from the atlas.
+fn check_hatch(dir: &Path, value: &serde_json::Value) -> Result<(), String> {
+    const MAX_ROWS: usize = 16;
+    let bad = |field: &str| tr!(format!("coquou.json 的 hatch.{field} 不合法"), format!("hatch.{field} in coquou.json is invalid"));
+    let image = |field: &str, path: &serde_json::Value| -> Result<(), String> {
+        let ok = path.as_str().is_some_and(|p| safe_rel(p) && read_header(&dir.join(p)).as_deref().and_then(image_size).is_some());
+        if ok {
+            Ok(())
+        } else {
+            Err(tr!(
+                format!("coquou.json 的 hatch.{field} 不存在，或不是 PNG / WebP 图片"),
+                format!("hatch.{field} in coquou.json is missing or not a PNG / WebP image")
+            ))
+        }
+    };
+    let map = value.as_object().ok_or_else(|| tr!("coquou.json 的 hatch 必须是对象", "hatch in coquou.json must be an object").to_string())?;
+    if !matches!(map.get("key").and_then(|v| v.as_str()), Some("green" | "magenta")) {
+        return Err(bad("key"));
+    }
+    for (field, max) in [("style", 32), ("description", 2000)] {
+        if map.get(field).is_some_and(|v| !v.as_str().is_some_and(|s| s.chars().count() <= max)) {
+            return Err(bad(field));
+        }
+    }
+    if map.get("withLook").is_some_and(|v| !v.is_boolean()) {
+        return Err(bad("withLook"));
+    }
+    image("base", map.get("base").unwrap_or(&serde_json::Value::Null))?;
+    if let Some(reference) = map.get("reference") {
+        image("reference", reference)?;
+    }
+    if let Some(rows) = map.get("rows") {
+        let rows = rows.as_object().filter(|r| r.len() <= MAX_ROWS).ok_or_else(|| bad("rows"))?;
+        for (id, path) in rows {
+            let id_ok = (1..=40).contains(&id.len()) && id.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-');
+            if !id_ok {
+                return Err(bad("rows"));
+            }
+            image(&format!("rows.{id}"), path)?;
+        }
+    }
+    Ok(())
+}
+
 /// The extension file: `coquou.json`, or `perchy.json` from before the rename.
 pub const EXT_FILES: [&str; 2] = ["coquou.json", "perchy.json"];
 
@@ -317,6 +364,9 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
         }
         if let Some(translations) = ext.get("translations") {
             check_translations(translations)?;
+        }
+        if let Some(hatch) = ext.get("hatch") {
+            check_hatch(dir, hatch)?;
         }
         if let Some(states) = ext["states"].as_object() {
             for (name, state) in states {
@@ -558,6 +608,34 @@ mod tests {
         assert!(err.contains("facing"), "{err}");
         fs::write(dir.join("coquou.json"), r#"{ "facing": "left" }"#).unwrap();
         assert!(validate(&dir).is_ok());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn hatch_material_is_checked() {
+        let dir = preset_with_ext("{}");
+        fs::create_dir_all(dir.join("hatch")).unwrap();
+        fs::copy(dir.join("spritesheet.png"), dir.join("hatch/base.png")).unwrap();
+        fs::write(dir.join("hatch/notes.txt"), "x").unwrap();
+        let check = |hatch: &str| {
+            fs::write(dir.join("coquou.json"), format!(r#"{{ "hatch": {hatch} }}"#)).unwrap();
+            validate(&dir)
+        };
+        assert!(check(r#"{ "key": "green", "base": "hatch/base.png", "withLook": true, "rows": { "idle": "hatch/base.png" } }"#).is_ok());
+        for bad in [
+            r#"{ "key": "blue", "base": "hatch/base.png" }"#,
+            r#"{ "key": "green" }"#,
+            r#"{ "key": "green", "base": "../spritesheet.png" }"#,
+            r#"{ "key": "green", "base": "hatch/notes.txt" }"#,
+            r#"{ "key": "green", "base": "hatch/base.png", "reference": "hatch/missing.png" }"#,
+            r#"{ "key": "green", "base": "hatch/base.png", "rows": { "../x": "hatch/base.png" } }"#,
+            r#"{ "key": "green", "base": "hatch/base.png", "rows": ["hatch/base.png"] }"#,
+            r#"{ "key": "green", "base": "hatch/base.png", "withLook": "yes" }"#,
+            r#""hatch/base.png""#,
+        ] {
+            let err = check(bad).unwrap_err();
+            assert!(err.contains("hatch"), "{bad}: {err}");
+        }
         fs::remove_dir_all(&dir).unwrap();
     }
 

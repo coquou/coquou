@@ -77,7 +77,11 @@ pub fn install_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
 
 /// Save a pet assembled on the hatch page (Codex v2 PNG atlas, its 2× HD copy,
 /// optional coquou.json), then install it through the same validated path as a .pet.
+/// `hatch_files` (name → PNG) is the hatch material kept for editing the pet
+/// later, written to `hatch/<name>.png` and listed in coquou.json `hatch`
+/// (doc/pet-format.md); install validates what coquou.json references.
 #[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
 pub fn install_generated(
     app: AppHandle,
     id: String,
@@ -86,6 +90,7 @@ pub fn install_generated(
     spritesheet_png: String,
     hd_png: String,
     coquou_json: Option<String>,
+    hatch_files: Option<std::collections::BTreeMap<String, String>>,
 ) -> Result<Installed, String> {
     let dir = scratch(&app, "hatched", "")?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -104,6 +109,13 @@ pub fn install_generated(
         write("spritesheet@2x.png", &B64.decode(hd_png).map_err(|e| e.to_string())?)?;
         if let Some(ext) = coquou_json {
             write("coquou.json", ext.as_bytes())?;
+        }
+        if let Some(files) = hatch_files.filter(|f| !f.is_empty()) {
+            std::fs::create_dir_all(dir.join("hatch")).map_err(|e| e.to_string())?;
+            for (name, png) in files {
+                let name = crate::hatch_run::checked(&name)?;
+                write(&format!("hatch/{name}.png"), &B64.decode(png).map_err(|e| e.to_string())?)?;
+            }
         }
         install_one(&app, &dir)
     })();

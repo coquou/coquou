@@ -312,6 +312,11 @@ async function renderDetail() {
   const hide = el("button", { className: "btn ghost", type: "button", textContent: p.hidden ? t("取消隐藏", "Unhide") : t("隐藏", "Hide") });
   hide.onclick = () => toggleHidden(p);
   more.append(exp, reveal, hide);
+  if (Array.isArray(ext.tags) && ext.tags.includes("ai-hatched")) {
+    const edit = el("button", { className: "btn ghost", type: "button", textContent: t("在孵化页修改", "Change in Hatch") });
+    edit.onclick = () => { showPage("hatch"); window.hatchEditPet?.(p.key); };
+    more.prepend(edit);
+  }
   if (p.source === "coquou") {
     const del = el("button", { className: "btn ghost danger", type: "button", textContent: t("删除", "Delete") });
     del.onclick = () => deletePet(p);

@@ -128,7 +128,11 @@ const HATCH = (() => {
   }
   async function canvasToB64(canvas) {
     const blob = await canvas.convertToBlob({ type: "image/png" });
-    const buf = new Uint8Array(await blob.arrayBuffer());
+    return bytesToB64(await blob.arrayBuffer());
+  }
+  /** ArrayBuffer (e.g. a file read with read_pet_file) → b64. */
+  function bytesToB64(bytes) {
+    const buf = new Uint8Array(bytes);
     let s = "";
     for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
     return btoa(s);
@@ -306,27 +310,103 @@ const HATCH = (() => {
       const fw = box.maxX - box.minX + 1, fh = box.maxY - box.minY + 1;
       const ids = new Set(parts.map((c) => c.id));
       const out = new ImageData(fw, fh);
-      // Body anchor: mean x of the opaque pixels in the upper part of the
-      // frame. Legs and swinging limbs widen the bounding box from frame to
-      // frame (a walk's stride vs. passing pose), so centring the box slides
-      // the body sideways; the head and torso stay put.
-      const upper = fh * BODY_BAND;
-      let area = 0, bodySum = 0, bodyN = 0;
       for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
         const sx = box.minX + x, sy = box.minY + y, p = sy * w + sx;
         const lab = labels[p];
         // Keep soft edge pixels next to the frame's own components too.
         if (lab === -1 ? data[p * 4 + 3] === 0 : !ids.has(lab)) continue;
         out.data.set(data.subarray(p * 4, p * 4 + 4), (y * fw + x) * 4);
-        if (data[p * 4 + 3] >= 128) {
-          area++;
-          if (y < upper) { bodySum += x; bodyN++; }
-        }
       }
-      const bodyX = bodyN ? bodySum / bodyN : fw / 2;
-      frames.push({ image: out, w: fw, h: fh, ch, sheetRow: Math.floor(i / cols), area, bottom: box.maxY - cy0, bodyX });
+      frames.push({ image: out, w: fw, h: fh, ch, sheetRow: Math.floor(i / cols), bottom: box.maxY - cy0, ...measure(out) });
     }
     return { frames, warnings };
+  }
+
+  /**
+   * Opaque area of a cut-out frame and its body anchor: the mean x of the
+   * opaque pixels in the upper part of the frame. Legs and swinging limbs
+   * widen the bounding box from frame to frame (a walk's stride vs. passing
+   * pose), so centring the box slides the body sideways; the head and torso
+   * stay put.
+   */
+  function measure(image) {
+    const { data, width: fw, height: fh } = image;
+    const upper = fh * BODY_BAND;
+    let area = 0, bodySum = 0, bodyN = 0;
+    for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
+      if (data[(y * fw + x) * 4 + 3] < 128) continue;
+      area++;
+      if (y < upper) { bodySum += x; bodyN++; }
+    }
+    return { area, bodyX: bodyN ? bodySum / bodyN : fw / 2 };
+  }
+
+  /**
+   * Frames cut from cells of an installed atlas (a pet being edited whose
+   * row has no stored sheet). `img`: the atlas pixels at `k`× (the HD copy
+   * when there is one, so the frames keep its resolution); `cells`:
+   * [[atlas row, column], …]. Each frame keeps its place in its cell, so
+   * layoutAll treats it like a frame cut from a generated sheet whose grid
+   * cell is the atlas cell: airborne rows keep their height above the ground.
+   */
+  function atlasFrames(img, cells, k) {
+    const cw = CELL_W * k, ch = CELL_H * k;
+    return cells.map(([row, col]) => {
+      const x0 = col * cw, y0 = row * ch;
+      let minX = cw, minY = ch, maxX = -1, maxY = -1;
+      for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+        if (img.data[((y0 + y) * img.width + x0 + x) * 4 + 3] === 0) continue;
+        if (x < minX) minX = x; if (x > maxX) maxX = x;
+        if (y < minY) minY = y; if (y > maxY) maxY = y;
+      }
+      if (maxX < 0) return null;
+      const fw = maxX - minX + 1, fh = maxY - minY + 1;
+      const out = new ImageData(fw, fh);
+      for (let y = 0; y < fh; y++) {
+        const from = ((y0 + minY + y) * img.width + x0 + minX) * 4;
+        out.data.set(img.data.subarray(from, from + fw * 4), y * fw * 4);
+      }
+      return { image: out, w: fw, h: fh, ch, sheetRow: row, bottom: maxY, ...measure(out) };
+    });
+  }
+
+  /** Whether the given atlas cells (see atlasFrames) hold identical pixels. */
+  function sameCells(img, cells, k) {
+    const cw = CELL_W * k, ch = CELL_H * k;
+    const [[r0, c0], ...rest] = cells;
+    for (const [row, col] of rest)
+      for (let y = 0; y < ch; y++) {
+        const a = ((r0 * ch + y) * img.width + c0 * cw) * 4, b = ((row * ch + y) * img.width + col * cw) * 4;
+        for (let i = 0; i < cw * 4; i++) if (img.data[a + i] !== img.data[b + i]) return false;
+      }
+    return true;
+  }
+
+  /**
+   * Frames drawn back onto a flat key-colour grid, the way the model returns
+   * a sheet: the stand-in base image (one frame) and the reference sheet for
+   * rows that depend on a row taken from the atlas. Every frame gets the same
+   * scale, the tallest filling `fill` of its grid cell, feet on one line.
+   */
+  async function framesSheet(frames, layout, key, fill = 0.65) {
+    const [w, h] = layout.size.split("x").map(Number);
+    const cw = w / layout.cols, ch = h / layout.rows;
+    const c = new OffscreenCanvas(w, h);
+    const g = c.getContext("2d");
+    g.fillStyle = `rgb(${KEY_RGB[key].join(",")})`;
+    g.fillRect(0, 0, w, h);
+    const real = frames.filter(Boolean);
+    const s = Math.min(fill * ch / Math.max(...real.map((f) => f.h)), 0.9 * cw / Math.max(...real.map((f) => f.w)));
+    g.imageSmoothingQuality = "high";
+    frames.forEach((f, i) => {
+      if (!f) return;
+      const src = new OffscreenCanvas(f.w, f.h);
+      src.getContext("2d").putImageData(f.image, 0, 0);
+      const x = (i % layout.cols + 0.5) * cw - f.bodyX * s;
+      const y = (Math.floor(i / layout.cols) + 0.5 + fill / 2) * ch - f.h * s;
+      g.drawImage(src, x, y, f.w * s, f.h * s);
+    });
+    return canvasToB64(c);
   }
 
   const median = (xs) => { const v = xs.slice().sort((a, b) => a - b); return v.length ? v[v.length >> 1] : null; };
@@ -403,6 +483,16 @@ const HATCH = (() => {
     return c;
   }
 
+  const keyPatchError = (i) => t(`第 ${i + 1} 帧带着一块抠像底色，没抠干净`, `Frame ${i + 1} still carries a patch of the key colour`);
+
+  /**
+   * Errors for frames taken from an installed atlas that still carry a patch
+   * of either key colour (pets hatched before processSheet caught those).
+   */
+  function atlasErrors(frames) {
+    return frames.flatMap((f, i) => (f && ["green", "magenta"].some((k) => keyShare(f, k) > KEY_LEFT_MAX) ? [keyPatchError(i)] : []));
+  }
+
   /** Share of a frame's opaque pixels that are clearly the key colour. */
   function keyShare(frame, key) {
     const d = frame.image.data;
@@ -440,7 +530,7 @@ const HATCH = (() => {
     if (missing) errors.push(t(`缺了 ${missing} 帧`, `${missing} frame(s) missing`));
     // Whatever survived the matte in the key colour is backdrop, not pet.
     split.frames.forEach((f, i) => {
-      if (f && keyShare(f, key) > KEY_LEFT_MAX) errors.push(t(`第 ${i + 1} 帧带着一块抠像底色，没抠干净`, `Frame ${i + 1} still carries a patch of the key colour`));
+      if (f && keyShare(f, key) > KEY_LEFT_MAX) errors.push(keyPatchError(i));
     });
     const placed = placeRow(split.frames, { lift: !!state.airborne });
     return { frames: split.frames, cells: placed.map((p) => cellCanvas(p)), warnings, errors, ok: !errors.length };
@@ -480,15 +570,6 @@ const HATCH = (() => {
     return out;
   }
 
-  function mirrorCells(cells) {
-    return cells.map((c) => {
-      const m = new OffscreenCanvas(CELL_W, CELL_H);
-      const g = m.getContext("2d");
-      g.translate(CELL_W, 0); g.scale(-1, 1); g.drawImage(c, 0, 0);
-      return m;
-    });
-  }
-
   /**
    * rows: { [rowIndex]: places[] } (from layoutAll) → the Codex v2 atlas at
    * `k`× (1 = 1536×2288; 2 = the HD copy named by coquou.json `hd`).
@@ -503,8 +584,9 @@ const HATCH = (() => {
 
   return {
     CELL_W, CELL_H, STATES, layoutFor, basePrompt, sheetPrompt,
-    decode, pixels, toPngB64, chooseKey,
-    processSheet, processBase, mirrorCells, composeAtlas, layoutAll,
+    decode, pixels, toPngB64, bytesToB64, chooseKey,
+    processSheet, processBase, composeAtlas, layoutAll,
+    atlasFrames, atlasErrors, sameCells, framesSheet,
   };
 })();
 

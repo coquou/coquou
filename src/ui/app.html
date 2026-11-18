@@ -125,6 +125,11 @@
         <!-- ② 宠物 -->
         <section class="step-card">
           <h2 data-en="Describe your pet"><i>2</i>描述你的宠物</h2>
+          <div class="hrow edit-row" id="editRow" hidden>
+            <span data-en="Or change a pet you hatched:">或者修改孵化过的宠物：</span>
+            <select id="editPick"></select>
+            <button class="btn" id="editLoad" type="button" data-en="Load">载入</button>
+          </div>
           <div class="pet-form">
             <div class="fields">
               <label data-en="Name">名字<input type="text" id="petName" placeholder="例如：橘子" data-en-placeholder="e.g. Clementine" /></label>
@@ -171,6 +176,10 @@
           <div class="final">
             <canvas id="atlas" class="checker" width="1536" height="2288"></canvas>
             <div class="grow">
+              <div class="install-mode" id="installMode" hidden>
+                <label class="check" id="modeReplace"><input type="radio" name="installMode" value="replace" checked /><span id="modeReplaceText"></span></label>
+                <label class="check" data-en="Save as a new pet"><input type="radio" name="installMode" value="new" />另存为新宠物</label>
+              </div>
               <label data-en="ID (folder name: letters, digits, - and _)">ID（文件夹名，字母数字 - _）<input type="text" id="petId" /></label>
               <button class="btn primary big" id="install" type="button" data-en="Put on the desktop">安装到桌面</button>
               <div class="status" id="installStatus"></div>

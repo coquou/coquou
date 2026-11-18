@@ -13,8 +13,11 @@ my-pet/
 ├── pet.json            必需 · Codex 原样
 ├── spritesheet.webp    必需 · Codex 原样
 ├── coquou.json         可选 · Coquou 扩展
-└── extra/              可选 · 扩展用到的额外精灵图
-    └── sleep.webp
+├── extra/              可选 · 扩展用到的额外精灵图
+│   └── sleep.webp
+└── hatch/              可选 · AI 孵化的素材（coquou.json 的 hatch）
+    ├── base.png
+    └── row-idle.png …
 ```
 
 宠物的标准形态是**目录**（与 Codex 一致，Codex 没有定义任何包扩展名）。
@@ -43,7 +46,7 @@ my-pet/
 - 最多 256 个文件，单文件 ≤ 32 MB，总计 ≤ 96 MB（按实际解压大小计）；
 - `id` 只能含字母、数字、`-`、`_`（≤ 64 字符）；
 - 精灵图必须是 PNG/WebP 且尺寸符合 Codex v1/v2；
-- `coquou.json` 必须是合法 JSON，引用的额外精灵图必须存在，`hd` 图集必须是主图集的 2–4 倍，`facing` 只能是规定的取值，台词不超过下文的上限。
+- `coquou.json` 必须是合法 JSON，引用的额外精灵图必须存在，`hd` 图集必须是主图集的 2–4 倍，`facing` 只能是规定的取值，台词不超过下文的上限，`hatch` 引用的素材必须是宠物目录里的图片。
 
 ## 1. `pet.json`（Codex 兼容层）
 
@@ -131,6 +134,7 @@ PNG 或 WebP，透明背景。行定义：
 | `states.<name>` | 新增或覆盖一个动画状态 | — |
 | `lines` | 台词气泡，按场合分组，见下表 | 内置的通用台词（跟随界面语言） |
 | `translations.<语言>` | 其他界面语言下用的名字、简介和台词，见下文「多语言」 | — |
+| `hatch` | AI 孵化的素材，Coquou 的孵化页用它载入宠物继续修改，见下文「孵化素材」；Codex 忽略 | — |
 
 `states.<name>` 字段：
 
@@ -167,6 +171,31 @@ PNG 或 WebP，透明背景。行定义：
 | `lines` | 这种语言下的台词，结构和规则同 `lines`；按场合取，缺的场合用 `lines`，再缺用内置通用台词 |
 
 语言用小写的 2–3 个字母代码，Coquou 目前用 `zh`（中文）和 `en`（英文）；当前界面语言没有翻译时用原文。安装时校验：最多 16 种语言；条目里的其他字段留给以后的格式版本，现在忽略。翻译只放在 `coquou.json` 里、`pet.json` 保持原样，所以 Codex 照常读到原文，兼容不受影响。
+
+**孵化素材**：Coquou 孵化的宠物（`tags` 含 `ai-hatched`）把生成时的原图存在宠物目录里，以后可以在孵化页载入，只重新生成某几行动作或者改形象。
+
+```json
+"hatch": {
+  "key": "green",
+  "style": "auto",
+  "description": "圆滚滚的橘色短毛猫",
+  "withLook": true,
+  "base": "hatch/base.png",
+  "reference": "hatch/ref.png",
+  "rows": { "idle": "hatch/row-idle.png", "running-right": "hatch/row-running-right.png" }
+}
+```
+
+| 字段 | 说明 |
+|---|---|
+| `key` | 抠像底色：`green` 或 `magenta`（必填） |
+| `style` / `description` | 孵化时选的画风和填的描述（最多 32 / 2000 个字） |
+| `withLook` | 是否生成了 16 个看向方向；没有时第 9–10 行都是待机第 1 帧 |
+| `base` | 标准形象原图（必填） |
+| `reference` | 参考图 |
+| `rows.<动作>` | 这一行动作的原始网格图（模型输出，未抠图）。键是孵化流水线的动作名：图集各行的状态名，加上 `look-cardinals`（看向上右下左的锚点）、`look-a` / `look-b`（第 9 / 10 行）；`running-left` 由 `running-right` 镜像，没有单独的图 |
+
+没有原图的行在载入时直接从图集里取帧（`hd` 图集优先），看向锚点取自第 9–10 行的上右下左四格；没有 `hatch` 的旧宠物用待机第 1 帧铺上抠像底色当标准形象。素材只能是 PNG / WebP 图片，安装时校验路径和图片头，并计入文件数和大小上限；原图每张一两 MB，整套大约十几到三十 MB。
 
 ## 4. 运行时状态 → 动画（降级规则）
 

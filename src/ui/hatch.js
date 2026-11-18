@@ -4,6 +4,7 @@
 // `window.hatchSetReference`).
 (() => {
 const { invoke } = window.__TAURI__.core;
+const { listen } = window.__TAURI__.event;
 const { t } = window.Coquou;
 const ask = (title, text, ok) => window.coquouConfirm(title, text, ok);
 
@@ -16,9 +17,13 @@ const st = {
   refB64: null, refData: null,
   key: "green",
   baseB64: null,
-  rows: {},        // id → { status, frames, cells, places, warnings, raw, error }
+  rows: {},        // id → { status, frames, cells, places, warnings, raw, error, atlas }
   atlasB64: null,
   hdB64: null,
+  // Editing an installed pet: { key, id, name, description, legacy } (see
+  // editPet), and its atlas ({ img, k }) for the rows taken from it.
+  source: null,
+  petAtlas: null,
 };
 
 function setStatus(el, text, kind = "") {
@@ -172,11 +177,12 @@ function saveMeta() {
   if (!persist || !st.baseB64) return;
   const rows = {};
   for (const [id, r] of Object.entries(st.rows))
-    if (r.raw || r.status === "bad") rows[id] = { status: r.status, warnings: r.warnings || [], error: r.error || "" };
+    if (r.raw || r.atlas || r.status === "bad") rows[id] = { status: r.status, warnings: r.warnings || [], error: r.error || "", atlas: !!r.atlas };
   invoke("hatch_put_meta", { meta: {
     version: 1, savedAt: new Date().toISOString(),
     name: $("petName").value, desc: $("petDesc").value, style: $("style").value,
     withLook: $("withLook").checked, key: st.key, profileId: $("profile").value, petId: $("petId").value, rows,
+    source: st.source,
   } }).catch((e) => console.warn("save meta failed", String(e)));
 }
 function saveImage(name, b64) {
@@ -196,9 +202,11 @@ async function offerResume() {
   const p = document.createElement("div");
   const name = m.name || t("未命名", "Untitled");
   const when = new Date(m.savedAt).toLocaleString(t("zh-CN", "en"));
-  p.textContent = t(
-    `上次的孵化还没完成：「${name}」，动作已完成 ${done}/${planned} 行（${when}）。继续的话，已生成的图不会重新收费。`,
-    `Your last hatch, ${name}, isn't finished: ${done}/${planned} animation rows done (${when}). Continuing doesn't pay again for images already made.`);
+  p.textContent = m.source
+    ? t(`上次对「${name}」的修改还没完成（${when}）。继续的话，已生成的图不会重新收费。`,
+      `Your changes to ${name} aren't finished (${when}). Continuing doesn't pay again for images already made.`)
+    : t(`上次的孵化还没完成：「${name}」，动作已完成 ${done}/${planned} 行（${when}）。继续的话，已生成的图不会重新收费。`,
+      `Your last hatch, ${name}, isn't finished: ${done}/${planned} animation rows done (${when}). Continuing doesn't pay again for images already made.`);
   const go = document.createElement("button"); go.className = "btn primary"; go.type = "button"; go.textContent = t("继续上次", "Continue");
   const drop = document.createElement("button"); drop.className = "btn"; drop.type = "button"; drop.textContent = t("丢弃", "Discard");
   go.onclick = () => restoreRun(run);
@@ -225,17 +233,141 @@ async function restoreRun(run) {
   }
   st.key = m.key || "green";
   st.baseB64 = run.images.base;
+  st.source = m.source || null;
+  st.petAtlas = null;
+  if (run.images.atlas) {
+    const bmp = await HATCH.decode(run.images.atlas);
+    st.petAtlas = { img: HATCH.pixels(bmp), k: bmp.width / (HATCH.CELL_W * window.Coquou.COLS) };
+  }
   renderBase(await HATCH.processBase(st.baseB64));
   for (const s of S) {
     const raw = run.images["row-" + s.id];
     if (raw) await applySheet(s, raw, false);
+    else if (m.rows?.[s.id]?.atlas && st.petAtlas) applyAtlas(s);
     else if (m.rows?.[s.id]?.status === "bad") st.rows[s.id] = { status: "bad", error: m.rows[s.id].error };
   }
   relayout();
   renderCards();
-  setStatus($("mainStatus"), t("已恢复上次的进度。点「生成全部动作」只会补上还没完成的行。", "Picked up where you left off. “Generate all” only fills in the rows that aren't done."), "ok");
+  renderInstallMode();
+  setStatus($("mainStatus"), st.source
+    ? t(`已载入「${st.source.name}」。某个动作不满意就在那一行写上想怎么改，点「重新生成」，只重做那一行；改了描述或参考图后点「重新生成形象」，所有动作都要重做。`,
+      `${st.source.name} is loaded. To fix one animation, say what to change on its row and click “Generate again”: only that row is redone. To change the look, edit the description or reference and click “Generate again” above; then every animation is redone.`)
+    : t("已恢复上次的进度。点「生成全部动作」只会补上还没完成的行。", "Picked up where you left off. “Generate all” only fills in the rows that aren't done."), "ok");
   afterRows();
 }
+
+// ---------- continue from an installed pet ----------
+// Pets hatched by Coquou (coquou.json `tags` has "ai-hatched"). Since this
+// version their hatch material is saved with them (coquou.json `hatch`,
+// doc/pet-format.md); older ones only have the atlas.
+let hatched = []; // list_pets entries
+const petFile = (key, path) => invoke("read_pet_file", { key, path });
+const petJson = async (key, path) => JSON.parse(new TextDecoder().decode(await petFile(key, path)));
+
+// Installs and deletions each trigger a scan; run them one after another so
+// an older scan can't finish last and bring back a pet that is gone.
+let scanning = Promise.resolve();
+function loadHatched() {
+  scanning = scanning.then(scanHatched);
+  return scanning;
+}
+async function scanHatched() {
+  const list = await invoke("list_pets").catch((e) => { console.warn("list pets failed", String(e)); return []; });
+  const found = [];
+  for (const p of list) {
+    if (!p.extFile) continue;
+    try {
+      const ext = await petJson(p.key, p.extFile);
+      if (Array.isArray(ext?.tags) && ext.tags.includes("ai-hatched")) found.push(p);
+    } catch (e) { console.warn("cannot read", p.key, p.extFile, String(e)); }
+  }
+  hatched = found;
+  renderPicker();
+}
+function renderPicker() {
+  const sel = $("editPick");
+  const keep = sel.value;
+  sel.innerHTML = "";
+  for (const p of hatched) sel.add(new Option(p.displayName, p.key));
+  if (hatched.some((p) => p.key === keep)) sel.value = keep;
+  $("editRow").hidden = !hatched.length;
+}
+
+/**
+ * Turn an installed hatched pet into a hatch run, as if it had been resumed:
+ * stored sheets are processed again; rows without one are cut from the atlas
+ * (the HD copy when there is one). Without stored material, the first idle
+ * frame on the key colour stands in for the base image.
+ */
+async function editPet(key) {
+  const entry = hatched.find((p) => p.key === key);
+  if (!entry) throw new Error(t("找不到这只宠物", "Cannot find this pet"));
+  const manifest = await petJson(key, "pet.json");
+  const ext = await petJson(key, entry.extFile);
+  const h = ext.hatch && typeof ext.hatch === "object" ? ext.hatch : null;
+  const atlasB64 = HATCH.bytesToB64(await petFile(key, ext.hd || manifest.spritesheetPath || "spritesheet.webp"));
+  const bmp = await HATCH.decode(atlasB64);
+  const k = bmp.width / (HATCH.CELL_W * window.Coquou.COLS);
+  const img = HATCH.pixels(bmp);
+  // Hatched without look rows: rows 9 and 10 repeat the first idle frame.
+  const lookCells = [9, 10].flatMap((r) => Array.from({ length: 8 }, (_, c) => [r, c]));
+  const withLook = typeof h?.withLook === "boolean" ? h.withLook : !HATCH.sameCells(img, [[0, 0], ...lookCells], k);
+  const key0 = h?.key || HATCH.chooseKey(img);
+  const read = async (path) => HATCH.bytesToB64(await petFile(key, path));
+  const images = {
+    atlas: atlasB64,
+    base: h?.base ? await read(h.base) : await HATCH.framesSheet(HATCH.atlasFrames(img, [[0, 0]], k), { cols: 1, rows: 1, size: "1024x1024" }, key0),
+  };
+  // The reference to regenerate the look from: the original one, else the
+  // look itself, so a changed description edits this pet instead of starting over.
+  images.ref = h?.reference ? await read(h.reference) : images.base;
+  const rows = {};
+  for (const s of S) {
+    if (s.mirrorOf || !wanted(s, withLook)) continue;
+    const path = h?.rows?.[s.id];
+    if (typeof path === "string") {
+      try { images["row-" + s.id] = await read(path); continue; }
+      catch (e) { console.warn("hatch sheet unreadable, using the atlas", s.id, String(e)); }
+    }
+    rows[s.id] = { status: "ok", atlas: true };
+  }
+  const meta = {
+    version: 1, savedAt: new Date().toISOString(),
+    name: manifest.displayName || manifest.id, desc: h?.description || "", style: h?.style || "auto",
+    withLook, key: key0, profileId: $("profile").value, petId: manifest.id, rows,
+    source: { key, id: manifest.id, name: entry.displayName, description: manifest.description || "", legacy: !h?.base },
+  };
+  if (persist) {
+    await invoke("hatch_clear");
+    await Promise.all(Object.entries(images).map(([name, png]) => invoke("hatch_put_image", { name, png })));
+    await invoke("hatch_put_meta", { meta });
+  }
+  notes.clear();
+  await restoreRun({ meta, images });
+  console.info("editing", key, h ? "with hatch material" : "from the atlas only");
+}
+
+async function startEdit(key) {
+  const el = $("mainStatus");
+  if ($("genBase").disabled || Object.values(st.rows).some((r) => r.status === "run")) {
+    setStatus(el, t("正在生成，等这一轮完成再载入。", "Still generating; load it once this round is done."), "bad");
+    return;
+  }
+  if ((st.baseB64 || $("baseArea").classList.contains("resume"))
+    && !(await ask(t("载入这只宠物？", "Load this pet?"), t("孵化页上现在的进度会被替换，已经生成的图片会删掉。", "What's on the hatch page now is replaced, and the images made so far are deleted."), t("载入", "Load")))) return;
+  setStatus(el, t("正在载入…", "Loading…"));
+  try { await editPet(key); }
+  catch (e) { setStatus(el, t("载入失败：", "Could not load: ") + e, "bad"); console.error("edit failed", key, String(e)); }
+}
+$("editLoad").addEventListener("click", () => $("editPick").value && startEdit($("editPick").value));
+// The pet library's 「在孵化里修改」 button (app.js).
+window.hatchEditPet = async (key) => {
+  if (!hatched.some((p) => p.key === key)) await loadHatched();
+  $("editPick").value = key;
+  return startEdit(key);
+};
+listen("pet-installed", loadHatched);
+listen("pets-changed", loadHatched);
 
 // ---------- generation ----------
 async function generate(prompt, images, size) {
@@ -265,7 +397,9 @@ async function genBase() {
     st.baseB64 = await generate(prompt, st.refB64 ? [st.refB64] : [], "1024x1024");
     const base = await HATCH.processBase(st.baseB64);
     renderBase(base);
-    // A new base starts a new run: old sheets no longer match it.
+    // A new base starts a new run: old sheets (and an edited pet's atlas
+    // rows) no longer match it.
+    st.petAtlas = null;
     if (persist) await invoke("hatch_clear").catch(() => {});
     if (st.refB64) saveImage("ref", st.refB64);
     saveImage("base", st.baseB64);
@@ -301,6 +435,13 @@ function renderBase(base) {
   const info = document.createElement("div");
   info.innerHTML = `<p class="hint">${t("左：模型原图　右：抠图并缩放到 192×208 后的效果", "Left: model output. Right: cut out and scaled to 192×208.")}</p>`
     + (base.warnings.length ? `<p class="hint" style="color:var(--warn)">${base.warnings.join("；")}</p>` : "");
+  if (st.source?.legacy && st.petAtlas) {
+    const note = document.createElement("p"); note.className = "hint";
+    note.textContent = t(
+      "这只宠物孵化时还没有保存原图，所以左边的形象是从图集里待机第 1 帧铺上抠像底色做的，比原图小、细节少一些；生成新动作时以它为参考，画风可能和原来的动作略有出入。没重新生成的动作直接沿用图集里的帧，只能整行重新生成，没法在原图上微调。",
+      "This pet was hatched before Coquou kept the original images, so the look on the left is the first idle frame from its atlas on the key colour: smaller and less detailed than the original. New animations use it as their reference and may differ a little in style from the old ones. Animations you don't regenerate keep their frames from the atlas; they can only be regenerated as a whole row, not touched up.");
+    info.append(note);
+  }
   wrap.append(raw, cut, info);
   area.append(wrap);
   st.rows = {};
@@ -323,6 +464,7 @@ function renderCards() {
       idle: [t("等待", "Waiting"), ""], run: [t("生成中…", "Generating…"), "run"], ok: [t("完成", "Done"), "ok"],
       warn: [t("有提醒", "Warnings"), "warn"], bad: [t("失败", "Failed"), "bad"],
     }[r.status];
+    if (r.atlas && r.status === "ok") pill[0] = t("沿用图集", "From the atlas");
     card.innerHTML = `<header><b>${s.label}</b><span class="pill ${pill[1]}">${s.mirrorOf ? t("镜像 · ", "Mirrored · ") : ""}${pill[0]}</span></header>`;
     const anim = document.createElement("canvas"); anim.className = "anim checker";
     anim.width = HATCH.CELL_W; anim.height = HATCH.CELL_H; anim.dataset.state = s.id;
@@ -371,13 +513,41 @@ const depsOf = (s) => (s.look ? ["look-cardinals"] : []);
 /** Turn a generated sheet into frames for state `s` (and its mirror). */
 async function applySheet(s, raw, save = true) {
   const out = await HATCH.processSheet(raw, s, st.key);
-  st.rows[s.id] = { status: out.ok && !out.warnings.length ? "ok" : out.ok ? "warn" : "bad", frames: out.frames, cells: out.cells, warnings: out.warnings, raw,
-    error: out.ok ? "" : out.errors.concat(out.warnings).join(t("；", "; ")) };
-  for (const m of S.filter((x) => x.mirrorOf === s.id))
-    st.rows[m.id] = { status: st.rows[s.id].status === "bad" ? "bad" : "ok", frames: out.frames, cells: HATCH.mirrorCells(out.cells), warnings: [], error: st.rows[s.id].error };
+  setRow(s, { status: out.ok && !out.warnings.length ? "ok" : out.ok ? "warn" : "bad", frames: out.frames, cells: out.cells, warnings: out.warnings, raw,
+    error: out.ok ? "" : out.errors.concat(out.warnings).join(t("；", "; ")) });
   if (save) { saveImage("row-" + s.id, raw); saveMeta(); }
-  relayout();
   return st.rows[s.id].status;
+}
+
+/**
+ * Frames for state `s` from the atlas of the pet being edited. The look
+ * anchors have no atlas row; they come from the up / right / down / left
+ * cells of the two look rows.
+ */
+function applyAtlas(s) {
+  const { img, k } = st.petAtlas;
+  const cells = s.cardinal ? [[9, 0], [9, 4], [10, 0], [10, 4]] : Array.from({ length: s.frames }, (_, c) => [s.row, c]);
+  const frames = HATCH.atlasFrames(img, cells, k);
+  const errors = frames.every(Boolean) ? HATCH.atlasErrors(frames) : [t("图集里这一行缺帧", "This row of the atlas is missing frames")];
+  setRow(s, { status: errors.length ? "bad" : "ok", frames, cells: [], warnings: [], atlas: true,
+    error: errors.length ? errors.join(t("；", "; ")) + t("，请重新生成这一行", "; generate this row again") : "" });
+}
+
+/** Store a row (and its mirror, which shares the frames) and lay all rows out again. */
+function setRow(s, row) {
+  st.rows[s.id] = row;
+  for (const m of S.filter((x) => x.mirrorOf === s.id))
+    st.rows[m.id] = { status: row.status === "bad" ? "bad" : "ok", frames: row.frames, cells: [], warnings: [], error: row.error };
+  relayout();
+}
+
+/**
+ * The sheet a dependent row is generated from: the model's own, or for a
+ * row taken from the atlas its frames drawn back onto a key-colour grid.
+ */
+async function sheetOf(id) {
+  const r = st.rows[id];
+  return r.raw || (r.sheet ??= await HATCH.framesSheet(r.frames, HATCH.layoutFor(r.frames.length), st.key));
 }
 
 // Errors not worth an automatic retry (bad key, bad request, wrong model…).
@@ -395,7 +565,7 @@ async function genRow(s, attempt = 1) {
   let retry = false;
   try {
     const prompt = HATCH.sheetPrompt(s, st.key, $("style").value, (notes.get(s.id) || "").trim());
-    const refs = [st.baseB64, ...depsOf(s).map((d) => st.rows[d].raw)];
+    const refs = [st.baseB64, ...(await Promise.all(depsOf(s).map(sheetOf)))];
     const raw = await generate(prompt, refs, HATCH.layoutFor(s.frames).size);
     const status = await applySheet(s, raw);
     console.info("row", s.id, status, status === "bad" ? st.rows[s.id].error : (st.rows[s.id].warnings || []).join("; "));
@@ -483,17 +653,92 @@ function slug(name) {
   return s || "pet-" + Date.now().toString(36);
 }
 
+// ---------- install ----------
+// Editing a pet: replace it (same id, so the name and lines the user gave it
+// in Coquou stay) or save a new one next to it.
+const installMode = () => document.querySelector('input[name="installMode"]:checked')?.value;
+const replacing = () => !!st.source && installMode() === "replace";
+async function coquouIds() {
+  const list = await invoke("list_pets").catch(() => []);
+  return new Set(list.filter((p) => p.source === "coquou").map((p) => p.id));
+}
+function renderInstallMode() {
+  const src = st.source;
+  $("installMode").hidden = !src;
+  if (!src) { $("petId").disabled = false; return; }
+  // Presets and Codex pets are read-only: they can only be saved as a new pet.
+  const canReplace = src.key.startsWith("coquou:");
+  $("modeReplace").hidden = !canReplace;
+  renderReplaceText();
+  document.querySelector(`input[name="installMode"][value="${canReplace ? "replace" : "new"}"]`).checked = true;
+  applyInstallMode();
+}
+function renderReplaceText() {
+  $("modeReplaceText").textContent = t(`替换原来的「${st.source.name}」（保留你给 TA 改的名字和台词）`, `Replace ${st.source.name} (keeps the name and lines you gave them)`);
+}
+async function applyInstallMode() {
+  $("petId").disabled = replacing();
+  if (replacing()) { $("petId").value = st.source.id; return; }
+  if (st.source && $("petId").value === st.source.id) {
+    const taken = await coquouIds();
+    let n = 2;
+    while (taken.has(`${st.source.id}-${n}`)) n++;
+    $("petId").value = `${st.source.id}-${n}`;
+  }
+}
+for (const r of document.querySelectorAll('input[name="installMode"]')) r.addEventListener("change", applyInstallMode);
+
+/** What the pet was made from, saved with it so it can be edited later (doc/pet-format.md). */
+function hatchMaterial() {
+  const files = { base: st.baseB64 };
+  const hatch = { key: st.key, style: $("style").value, description: $("petDesc").value.trim(), withLook: $("withLook").checked, base: "hatch/base.png", rows: {} };
+  // The stand-in reference of an edited pet is its own look; no need to keep it twice.
+  if (st.refB64 && st.refB64 !== st.baseB64) { files.ref = st.refB64; hatch.reference = "hatch/ref.png"; }
+  for (const s of S) {
+    const raw = st.rows[s.id]?.raw;
+    if (s.mirrorOf || !raw || !wanted(s, hatch.withLook)) continue;
+    files["row-" + s.id] = raw;
+    hatch.rows[s.id] = `hatch/row-${s.id}.png`;
+  }
+  return { files, hatch };
+}
+
+/**
+ * The replaced pet's coquou.json with the new atlas and hatch material:
+ * lines, translations, author and the like stay. Extra sheets aren't carried
+ * over, so states drawn from one are dropped.
+ */
+async function keptExt(fresh) {
+  const extFile = hatched.find((p) => p.key === st.source.key)?.extFile;
+  let old = null;
+  try { if (extFile) old = await petJson(st.source.key, extFile); }
+  catch (e) { console.warn("cannot read the replaced pet's", extFile, String(e)); }
+  if (!old || typeof old !== "object") return fresh;
+  const merged = { ...old, ...fresh, tags: [...new Set([...(Array.isArray(old.tags) ? old.tags : []), ...fresh.tags])] };
+  const states = Object.entries(old.states || {}).filter(([, v]) => !v?.sheet);
+  if (states.length) merged.states = Object.fromEntries(states); else delete merged.states;
+  return merged;
+}
+
 async function install() {
   const el = $("installStatus");
   try {
     const p = currentProfile();
+    const replace = replacing();
+    const id = replace ? st.source.id : $("petId").value.trim();
+    if (st.source && !replace && (await coquouIds()).has(id))
+      throw new Error(t("已经有宠物在用这个 ID 了，换一个吧", "Another pet already uses this ID; pick another one"));
+    const { files, hatch } = hatchMaterial();
+    let ext = { format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model }, hatch };
+    if (replace) ext = await keptExt(ext);
     const done = await invoke("install_generated", {
-      id: $("petId").value.trim(),
-      displayName: $("petName").value.trim() || $("petId").value.trim(),
-      description: $("petDesc").value.trim() || "AI hatched pet",
+      id,
+      displayName: $("petName").value.trim() || id,
+      description: (replace ? st.source.description : $("petDesc").value.trim()) || "AI hatched pet",
       spritesheetPng: st.atlasB64,
       hdPng: st.hdB64,
-      coquouJson: JSON.stringify({ format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model } }, null, 2),
+      coquouJson: JSON.stringify(ext, null, 2),
+      hatchFiles: files,
     });
     setStatus(el, done.replaced
       ? t(`已更新「${done.displayName}」，桌宠已经换成 TA 了。`, `Updated ${done.displayName}; they're on your desktop now.`)
@@ -536,6 +781,7 @@ window.hatchRelabel = () => {
   renderGenBase();
   updateEstimate();
   renderCards();
+  if (st.source) renderReplaceText();
 };
 
 // ---------- start ----------
@@ -544,6 +790,7 @@ renderDropHint();
 renderBaseHint();
 renderGenBase();
 updateEstimate();
+loadHatched();
 loadProfiles().then(() => (window.__COQUOU_SELFTEST__ ? selftest() : offerResume()));
 
 // Dev self-test (`coquou --hatch-selftest <base url> <images|chat>`) runs the
@@ -562,7 +809,7 @@ async function selftest() {
     $("petName").value = "自测团子"; $("petDesc").value = "a round orange blob mascot";
     if (!(await genBase())) throw new Error("base failed");
     await genAll();
-    if (!afterRows()) throw new Error("rows incomplete: " + JSON.stringify(Object.fromEntries(Object.entries(st.rows).map(([k, v]) => [k, v.status + (v.error ? ":" + v.error : "")]))));
+    if (!afterRows()) throw new Error("rows incomplete: " + rowStates());
     await buildFinal();
     if (persist) {
       // Save/restore round trip: rebuild everything from the stored run and
@@ -582,12 +829,67 @@ async function selftest() {
     }
     $("petId").value = "selftest-" + cfg.protocol;
     const done = await install();
-    console.info("selftest", done ? "PASS " + done.key : "FAIL install");
+    if (!done) throw new Error("install failed");
+    await selftestEdit(done);
+    console.info("selftest PASS " + done.key);
   } catch (e) {
     console.error("selftest FAIL", String(e));
   } finally {
     await invoke("ai_delete_profile", { id: saved.id }).catch(() => {});
     if (persist) await invoke("hatch_clear").catch(() => {});
+  }
+}
+
+const rowStates = () => JSON.stringify(Object.fromEntries(Object.entries(st.rows).map(([k, v]) => [k, v.status + (v.atlas ? "(atlas)" : "") + (v.error ? ":" + v.error : "")])));
+
+// Self-test of continuing from an installed pet: once with its hatch
+// material (the atlas must come back byte for byte; one row regenerated,
+// the pet replaced), once as a pet hatched before the material was kept
+// (rows cut from its atlas; the idle row and a look row, whose anchors come
+// from the atlas, regenerated; saved as a new pet).
+async function selftestEdit(done) {
+  const installed = st.atlasB64, installedHd = st.hdB64;
+  const fresh = () => { st.rows = {}; st.baseB64 = null; st.atlasB64 = null; st.hdB64 = null; };
+  const regenerate = async (ids) => {
+    for (const id of ids) { notes.set(id, "make the motion bigger"); await genRow(S.find((s) => s.id === id)); }
+    if (!afterRows()) throw new Error("rows incomplete after regenerating: " + rowStates());
+    await buildFinal();
+  };
+
+  await loadHatched();
+  fresh();
+  await editPet(done.key);
+  await buildFinal();
+  if (st.atlasB64 !== installed) throw new Error("editing the installed pet gave a different atlas");
+  await regenerate(["waving"]);
+  if (!replacing()) throw new Error("replacing is not the default");
+  const replaced = await install();
+  if (!replaced?.replaced || replaced.key !== done.key) throw new Error("replacing the pet failed");
+  console.info("selftest edit OK", done.key);
+
+  const oldId = done.key.split(":")[1] + "-old";
+  const old = await invoke("install_generated", {
+    id: oldId, displayName: "自测旧宠物", description: "AI hatched pet", spritesheetPng: installed, hdPng: installedHd,
+    coquouJson: JSON.stringify({ format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], generator: { tool: "coquou-hatch" } }),
+  });
+  let copy = null;
+  try {
+    await loadHatched();
+    fresh();
+    await editPet(old.key);
+    if (!st.source?.legacy || !afterRows()) throw new Error("the old pet did not load from its atlas: " + rowStates());
+    await regenerate(["idle", "look-a"]);
+    if (!st.rows["look-cardinals"].atlas) throw new Error("look anchors should still come from the atlas");
+    document.querySelector('input[name="installMode"][value="new"]').checked = true;
+    await applyInstallMode();
+    copy = await install();
+    if (!copy || copy.replaced || copy.key !== `coquou:${oldId}-2`) throw new Error("saving as a new pet failed: " + JSON.stringify(copy));
+    const ext = await petJson(copy.key, "coquou.json");
+    const kept = Object.keys(ext.hatch?.rows || {}).sort().join(",");
+    if (kept !== "idle,look-a") throw new Error("saved hatch rows: " + kept);
+    console.info("selftest edit old OK", old.key);
+  } finally {
+    for (const k of [old.key, copy?.key]) if (k) await invoke("delete_pet", { key: k }).catch((e) => console.warn("cleanup", k, String(e)));
   }
 }
 })();

@@ -3,9 +3,11 @@
 //!
 //! <app data>/hatch-run/
 //!   meta.json          inputs + per-row status (written by the frontend)
-//!   <name>.png         reference, base and raw row sheets
+//!   <name>.png         reference, base and raw row sheets; when editing a
+//!                      pet, also its atlas (rows kept from it)
 //!
-//! Only raw model output is stored; frames are re-derived from it on load.
+//! Only raw model output (and the atlas being edited) is stored; frames are
+//! re-derived from it on load.
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::Serialize;
@@ -18,8 +20,9 @@ fn dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map(|d| d.join("hatch-run")).map_err(|e| e.to_string())
 }
 
-/// `ref`, `base`, `row-<state id>`: letters, digits and dashes only.
-fn checked(name: &str) -> Result<&str, String> {
+/// `ref`, `base`, `atlas`, `row-<state id>`: letters, digits and dashes only.
+/// Also names the hatch files saved into a pet (library::install_generated).
+pub fn checked(name: &str) -> Result<&str, String> {
     let ok = !name.is_empty() && name.len() <= 40 && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-');
     ok.then_some(name).ok_or_else(|| format!("bad name: {name}"))
 }
