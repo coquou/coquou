@@ -2,35 +2,68 @@
 //! reveal, delete. Validation and the .pet format live in install.rs.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
+use serde::Serialize;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 
 use crate::install::{self, Installed};
 use crate::sync::lock;
 
-/// The pet to show first: one installed (or named with `--pet`) before the
-/// overlay page was listening. The overlay claims it with `overlay_ready`;
-/// after that, installs reach it through `pet-installed` events.
+/// What happened before the overlay page was listening: the pet to show
+/// first (one installed, or named with `--pet`) and installs that failed
+/// (files given at launch). Events sent then would be lost, so the overlay
+/// claims these with `overlay_ready`; after that, they reach it as
+/// `pet-installed` / `pet-install-failed` events. One lock covers `ready`
+/// and the queue, so nothing is queued after the overlay has claimed it.
 #[derive(Default)]
-pub struct Startup {
-    ready: AtomicBool,
-    pending: Mutex<Option<String>>,
+pub struct Startup(Mutex<Early>);
+
+#[derive(Default, Serialize)]
+pub struct Early {
+    #[serde(skip)]
+    ready: bool,
+    pet: Option<String>,
+    failed: Vec<InstallFailure>,
+}
+
+/// Payload of `pet-install-failed`.
+#[derive(Serialize, Clone)]
+pub struct InstallFailure {
+    file: Option<String>,
+    error: String,
 }
 
 pub fn set_pending<R: Runtime>(app: &AppHandle<R>, key: String) {
     let startup = app.state::<Startup>();
-    if !startup.ready.load(Ordering::SeqCst) {
-        *lock(&startup.pending) = Some(key);
+    let mut early = lock(&startup.0);
+    if !early.ready {
+        early.pet = Some(key);
     }
 }
 
-/// The overlay is listening now; returns the pet it should start with.
+/// Tell the overlay an install failed, or keep it until the overlay is ready.
+fn report_failure<R: Runtime>(app: &AppHandle<R>, failure: InstallFailure) {
+    {
+        let startup = app.state::<Startup>();
+        let mut early = lock(&startup.0);
+        if !early.ready {
+            early.failed.push(failure);
+            return;
+        }
+    }
+    let _ = app.emit("pet-install-failed", failure);
+}
+
+/// The overlay is listening now; returns the pet it should start with and
+/// the installs that failed before.
 #[tauri::command]
-pub fn overlay_ready(startup: State<Startup>) -> Option<String> {
-    startup.ready.store(true, Ordering::SeqCst);
-    lock(&startup.pending).take()
+pub fn overlay_ready(startup: State<Startup>) -> Early {
+    let mut early = lock(&startup.0);
+    let claimed = std::mem::take(&mut *early);
+    early.ready = true;
+    claimed
 }
 
 /// A fresh path in the app cache for temporary install input.
@@ -72,10 +105,7 @@ pub fn install_paths<R: Runtime>(app: &AppHandle<R>, paths: Vec<PathBuf>) {
     for path in paths {
         if let Err(error) = install_one(app, &path) {
             log::warn!("install failed for {}: {error}", path.display());
-            let _ = app.emit("pet-install-failed", serde_json::json!({
-                "file": path.file_name().map(|n| n.to_string_lossy().into_owned()),
-                "error": error,
-            }));
+            report_failure(app, InstallFailure { file: path.file_name().map(|n| n.to_string_lossy().into_owned()), error });
         }
     }
 }

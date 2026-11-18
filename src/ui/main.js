@@ -38,7 +38,7 @@ const pet = {
   x: 300, y: -120, vx: 0, vy: 0,
   facing: 1, face: 1, state: "air", stateT: 0, nextDecision: 2,
   happyUntil: 0, loved: 0, lookAngle: null, swing: 0, lastTouch: 0,
-  task: null, taskSince: 0, taskEnd: 0, sadUntil: 0, // see "activity" below
+  task: null, taskSince: 0, taskEnd: 0, sadPending: false, sadUntil: 0, // see "activity" below
   target: null, // x the pet walks back to when it is outside its zone
 };
 
@@ -343,9 +343,10 @@ listen("pet-installed", async ({ payload }) => {
     say(payload.replaced ? t(`更新好了：${payload.displayName}`, `Updated: ${payload.displayName}`) : t(`安装好了：${payload.displayName}`, `Installed: ${payload.displayName}`), 3);
   }
 });
-listen("pet-install-failed", ({ payload }) => {
-  say(t(`装不上${payload.file ? " " + payload.file : ""}：`, `Cannot install${payload.file ? " " + payload.file : ""}: `) + payload.error, 5);
-});
+function installFailed({ file, error }) {
+  say(t(`装不上${file ? " " + file : ""}：`, `Cannot install${file ? " " + file : ""}: `) + error, 5);
+}
+listen("pet-install-failed", ({ payload }) => installFailed(payload));
 listen("update-available", ({ payload }) => {
   say(t(`Coquou 有新版本 ${payload.version} 啦，点托盘图标就能更新`, `Coquou ${payload.version} is out! Update from the tray icon`), 6);
 });
@@ -361,7 +362,8 @@ listen("pets-changed", async ({ payload }) => {
 // the whole state, so one missed before this page listened is corrected by
 // the next. A task stays on screen at least TASK_MIN, so a quick install
 // shows a full loop instead of a flicker. Failures make the pet sad for a
-// moment (`failed`).
+// moment (`failed`), timed from when TA stands idle again, so a failure that
+// lands while the pet is held or falling (as at start-up) is still seen.
 const TASK_MIN = 1.5, SAD_FOR = 2.4; // s
 listen("pet-activity", ({ payload }) => {
   const want = payload.running ? "running" : payload.review ? "review" : null;
@@ -374,7 +376,7 @@ listen("pet-activity", ({ payload }) => {
   }
 });
 listen("pet-failed", () => sad());
-function sad() { pet.sadUntil = clock + SAD_FOR; touch(clock); settle(); }
+function sad() { pet.sadPending = true; touch(clock); settle(); }
 
 // ---------- pet switching ----------
 // Loading takes a moment; only the most recent request may take effect
@@ -436,6 +438,7 @@ function nearestHome(x) {
 // ---------- behaviour ----------
 function think(t, dt) {
   pet.stateT += dt;
+  if (pet.sadPending && pet.state === "idle") { pet.sadPending = false; pet.sadUntil = t + SAD_FOR; }
   // Done: linger a moment before strolling off, so the short gaps between
   // one AI request and the next don't send the pet walking back and forth.
   if (pet.task && t >= pet.taskEnd) {
@@ -458,7 +461,7 @@ function think(t, dt) {
   switch (pet.state) {
     case "idle":
       if (!zoneOf(pet.x)) { pet.target = nearestHome(pet.x); setState("walk"); break; }
-      if (pet.task) break; // stays put while busy
+      if (pet.task || pet.sadPending || pet.sadUntil > t) break; // stays put while busy or sad
       if (prefs.sleepAfter > 0 && t - pet.lastTouch > prefs.sleepAfter && Math.random() < dt * 0.2) { setState("sleep"); break; }
       if (t > nextIdleChat) { nextIdleChat = t + 120 + Math.random() * 180; chat("idle"); }
       if (pet.stateT > pet.nextDecision) {
@@ -607,8 +610,13 @@ listen("settings-changed", loadLang);
   applyPrefs(await invoke("prefs_get"));
   const pets = await invoke("list_pets").catch(() => []);
   console.info("pets found:", pets.map((p) => p.key).join(", ") || "(none)");
-  const first = (await invoke("overlay_ready").catch(() => null)) ?? prefs.pet;
+  // Installs from files given at launch may have finished (or failed)
+  // before this page was listening; library.rs kept them for now.
+  const early = await invoke("overlay_ready").catch((e) => { console.warn("overlay ready", e); return null; });
+  const first = early?.pet ?? prefs.pet;
   if (!first || !(await usePet(first))) await useFallback(pets, first);
+  // Their `pet-failed` was sent before anyone listened, so be sad here.
+  for (const f of early?.failed ?? []) { installFailed(f); sad(); }
 
   // First run: show the app window once and say where Coquou lives.
   if (!prefs.firstRunDone) {

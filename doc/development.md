@@ -104,6 +104,7 @@ target/ / gen/           编译输出（不进仓库）
 - 「桌面上正在显示哪只宠物」是运行时状态（`report_current_pet`）：记住的宠物不存在时，桌宠会临时换一只，但不改掉用户的选择。
 - 换宠物要先加载素材，所以走桌宠窗口：主窗口发 `pet-command`（`pet:<key>`），托盘菜单发 `reset`、`sleep`。
 - 宠物的「干活 / 检查 / 难过」（Codex 的 `running` / `review` / `failed` 行）反映 Coquou 自己的工作：`ai_generate` 和每次安装宠物包都持有 `activity::begin` 返回的守卫，计数变化时向桌宠窗口发 `pet-activity`（`{ running, review }`，整份状态）；守卫在任何退出路径上都会释放，所以宠物不会卡在「干活」。失败是一次性的 `pet-failed`：安装失败和更新安装失败由 Rust 发，孵化失败由孵化页在重试之后仍失败时发（只有页面知道失败是不是最终的）。
+- 启动参数里的文件在桌宠页面开始监听之前就装完了，那时发的事件会丢，所以 `library::Startup` 先记下要显示的宠物和装不上的文件，等页面调 `overlay_ready` 时一起交给它；之后才直接发 `pet-installed` / `pet-install-failed`。「是否已就绪」和这份记录在同一把锁里，页面领走之后不会再有东西记进来。
 - 右键宠物弹出托盘菜单，但不含「退出」（`show_pet_menu`，只接受桌宠窗口调用），点击结果同样走 `tray::on_menu`。
 
 ### 外观与语言
