@@ -317,6 +317,17 @@ pub const STATE_NAMES: [&str; 17] = [
     "eat", "held", "rise", "fall", "land", "sleep", "happy", "loved",
 ];
 
+/// The `states` nothing plays: names not in STATE_NAMES, and `rise`
+/// without `fall` (the overlay only splits the flight in two when the
+/// pet has a falling animation).
+fn unused_states(states: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
+    states
+        .keys()
+        .filter(|n| !STATE_NAMES.contains(&n.as_str()) || (*n == "rise" && !states.contains_key("fall")))
+        .cloned()
+        .collect()
+}
+
 /// What validating a pet found.
 #[derive(Debug)]
 struct Checked {
@@ -402,11 +413,7 @@ fn validate(dir: &Path) -> Result<Checked, String> {
         ext_value = Some(ext);
     }
     let display_name = pets::own_name(&manifest, ext_value.as_ref(), &id);
-    let unused_states = ext_value
-        .as_ref()
-        .and_then(|ext| ext["states"].as_object())
-        .map(|states| states.keys().filter(|n| !STATE_NAMES.contains(&n.as_str())).cloned().collect())
-        .unwrap_or_default();
+    let unused_states = ext_value.as_ref().and_then(|ext| ext["states"].as_object()).map(unused_states).unwrap_or_default();
     Ok(Checked { id, display_name, unused_states })
 }
 
@@ -633,6 +640,10 @@ mod tests {
         let dir = preset_with_ext(r#"{ "states": { "sleep": { "row": 0 }, "running": { "row": 7 }, "dance": { "row": 3 } } }"#);
         assert_eq!(validate(&dir).unwrap().unused_states, ["dance"]);
         fs::remove_dir_all(&dir).unwrap();
+        let unused = |states: serde_json::Value| unused_states(states.as_object().unwrap());
+        assert_eq!(unused(serde_json::json!({ "rise": {}, "land": {} })), ["rise"]);
+        assert!(unused(serde_json::json!({ "rise": {}, "fall": {} })).is_empty());
+        assert!(unused(serde_json::json!({ "fall": {} })).is_empty());
     }
 
     #[test]
