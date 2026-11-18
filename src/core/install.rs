@@ -190,7 +190,7 @@ fn image_size(bytes: &[u8]) -> Option<(u32, u32)> {
 pub type Lines = std::collections::BTreeMap<String, Vec<String>>;
 
 /// The occasions the overlay speaks on.
-pub const LINE_KINDS: [&str; 6] = ["hello", "click", "pet", "wake", "held", "idle"];
+pub const LINE_KINDS: [&str; 9] = ["hello", "click", "pet", "wake", "held", "idle", "working", "failed", "waiting"];
 
 /// Bounded sizes for lines, from a pet file or the user's own (prefs.rs).
 pub fn check_lines(lines: &Lines) -> Result<(), String> {

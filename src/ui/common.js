@@ -68,6 +68,9 @@
       wake: ["唔……谁吵我", "我没睡着！"],
       held: ["哇！放我下来！", "好高呀"],
       idle: ["休息一下眼睛吧", "记得喝水哦", "我就在这儿陪你"],
+      working: ["忙着呢～", "交给我吧！", "嗯……让我看看"],
+      failed: ["呜……没成功", "哎呀，出错了"],
+      waiting: ["好了，快来看看！", "等你哦～"],
     },
     en: {
       hello: ["I'm here!", "New day, let's do this!"],
@@ -76,6 +79,9 @@
       wake: ["Mmh… who's there?", "I wasn't sleeping!"],
       held: ["Whoa! Put me down!", "So high up!"],
       idle: ["Rest your eyes a little", "Remember to drink water", "I'm right here with you"],
+      working: ["On it!", "Leave it to me!", "Hmm… let me see"],
+      failed: ["Oh no… that didn't work", "Oops, something went wrong"],
+      waiting: ["Done! Come take a look!", "Waiting for you~"],
     },
   };
   const defaultLines = (kind) => DEFAULT_LINES[lang][kind];

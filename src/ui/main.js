@@ -381,7 +381,7 @@ const REACTIONS = { failed: 2.4, waiting: 3 }; // s on screen
 listen("pet-activity", ({ payload }) => {
   const want = payload.running ? "running" : payload.review ? "review" : null;
   if (want) {
-    if (pet.task !== want) { pet.task = want; pet.taskSince = clock; }
+    if (pet.task !== want) { pet.task = want; pet.taskSince = clock; chat("working"); }
     pet.taskEnd = Infinity;
     touch(clock); settle();
   } else if (pet.task) {
@@ -459,6 +459,7 @@ function think(t, dt) {
   if (pet.reactionPending && pet.state === "idle") {
     pet.reaction = pet.reactionPending; pet.reactionPending = null;
     pet.reactionUntil = t + REACTIONS[pet.reaction];
+    chat(pet.reaction);
   }
   // Done: linger a moment before strolling off, so the short gaps between
   // one AI request and the next don't send the pet walking back and forth.

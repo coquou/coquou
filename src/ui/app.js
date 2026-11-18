@@ -36,7 +36,7 @@ const LANGUAGES = () => [["system", t("跟随系统", "System")], ["zh", "中文
 const sourceName = (s) => ({ preset: t("预设", "Preset"), coquou: t("我的", "Mine"), codex: "Codex" }[s] || s);
 const FILTERS = () => [["all", t("全部", "All")], ["preset", sourceName("preset")], ["coquou", sourceName("coquou")], ["codex", "Codex"], ["hidden", t("已隐藏", "Hidden")]];
 // Occasions a pet speaks on (prefs.rs / install.rs LINE_KINDS).
-const LINE_KINDS = () => [["hello", t("打招呼", "Hello")], ["click", t("被点", "Clicked")], ["pet", t("被摸", "Petted")], ["wake", t("被吵醒", "Woken up")], ["held", t("被拎起来", "Picked up")], ["idle", t("闲着没事", "Idle")]];
+const LINE_KINDS = () => [["hello", t("打招呼", "Hello")], ["click", t("被点", "Clicked")], ["pet", t("被摸", "Petted")], ["wake", t("被吵醒", "Woken up")], ["held", t("被拎起来", "Picked up")], ["idle", t("闲着没事", "Idle")], ["working", t("忙着干活", "Working")], ["failed", t("出错了", "Something failed")], ["waiting", t("等你来看", "Waiting for you")]];
 
 // Preview chips: Codex row names (common.js ROWS) and their labels.
 const CHIPS = () => [["idle", t("待机", "Idle")], ["running-right", t("走路", "Walk")], ["waving", t("挥手", "Wave")], ["jumping", t("跳跃", "Jump")], ["running", t("干活", "Work")], ["review", t("思考", "Think")], ["failed", t("难过", "Sad")]];
