@@ -5,7 +5,8 @@
 //! counted, so overlapping work (several hatch rows at once) reads as one
 //! stretch, and a guard is released on every exit path, errors included,
 //! so the pet can never be left stuck "working". Each change sends the
-//! whole state to the overlay as `pet-activity`; `pet-failed` is a one-off.
+//! whole state to the overlay as `pet-activity`; a failure is a one-off
+//! `pet-react` ("failed").
 
 use crate::sync::lock;
 use std::sync::Mutex;
@@ -57,7 +58,7 @@ impl<R: Runtime> Drop for Busy<R> {
 
 /// Something the user asked for went wrong: the pet looks sad for a moment.
 pub fn failed<R: Runtime>(app: &AppHandle<R>) {
-    let _ = app.emit_to(crate::overlay::LABEL, "pet-failed", ());
+    let _ = app.emit_to(crate::overlay::LABEL, "pet-react", "failed");
 }
 
 fn change<R: Runtime>(app: &AppHandle<R>, f: impl FnOnce(&mut Counts)) {

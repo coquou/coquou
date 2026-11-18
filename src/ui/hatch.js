@@ -409,10 +409,11 @@ listen("pet-installed", loadHatched);
 listen("pets-changed", loadHatched);
 
 // ---------- generation ----------
-// A generation that finally failed makes the desktop pet sad for a moment
-// (main.js "activity"); the pet shows the requests themselves on its own
-// (activity.rs), but only this page knows when a failure is final.
-const petFailed = () => emit("pet-failed").catch((e) => console.warn("pet-failed", String(e)));
+// The desktop pet reacts (main.js "activity"): sad when a generation finally
+// failed, asking for the user when a step is ready to look at. The pet shows
+// the requests themselves on its own (activity.rs), but only this page knows
+// when a failure is final or a result is ready.
+const petReact = (name) => emit("pet-react", name).catch((e) => console.warn("pet-react", String(e)));
 
 async function generate(prompt, images, size) {
   const p = currentProfile();
@@ -448,13 +449,14 @@ async function genBase() {
     if (st.refB64) saveImage("ref", st.refB64);
     saveImage("base", st.baseB64);
     saveMeta();
+    petReact("waiting");
     setStatus(el, t("形象好了。满意的话点「生成全部动作」，不满意可以改描述后重新生成。", "The look is ready. Happy with it? Click “Generate all”. If not, change the description and generate again."), "ok");
     console.info("base ok", base.bgKind, base.warnings.join("; "));
     return true;
   } catch (e) {
     setStatus(el, t("生成失败：", "Generation failed: ") + e, "bad");
     console.error("base failed", String(e));
-    petFailed();
+    petReact("failed");
     return false;
   } finally {
     $("genBase").disabled = false;
@@ -539,7 +541,7 @@ function renderCards() {
       const btn = document.createElement("button"); btn.className = "btn"; btn.type = "button";
       btn.textContent = r.status === "idle" ? t("只生成这一行", "Generate this row") : t("重新生成", "Generate again");
       btn.disabled = r.status === "run" || !st.baseB64;
-      btn.onclick = () => genRow(s).then(afterRows);
+      btn.onclick = () => genRow(s).then(() => afterRows() && petReact("waiting"));
       card.append(btn);
     }
     box.append(card);
@@ -629,7 +631,7 @@ async function genRow(s, attempt = 1) {
     await new Promise((r) => setTimeout(r, window.__COQUOU_SELFTEST__ ? 200 : 3000));
     return genRow(s, attempt + 1);
   }
-  if (st.rows[s.id].status === "bad") petFailed();
+  if (st.rows[s.id].status === "bad") petReact("failed");
   renderCards();
 }
 
@@ -657,7 +659,7 @@ async function genAll() {
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, worker));
   $("genAll").disabled = $("genBase").disabled = false;
-  afterRows();
+  if (afterRows()) petReact("waiting");
 }
 $("genBase").addEventListener("click", genBase);
 $("genAll").addEventListener("click", genAll);

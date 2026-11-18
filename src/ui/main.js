@@ -38,7 +38,8 @@ const pet = {
   x: 300, y: -120, vx: 0, vy: 0,
   facing: 1, face: 1, state: "air", stateT: 0, nextDecision: 2,
   happyPending: false, happyUntil: 0, loved: 0, lookAngle: null, swing: 0, lastTouch: 0,
-  task: null, taskSince: 0, taskEnd: 0, sadPending: false, sadUntil: 0, // see "activity" below
+  task: null, taskSince: 0, taskEnd: 0, // see "activity" below
+  reaction: null, reactionPending: null, reactionUntil: 0,
   target: null, // x the pet walks back to when it is outside its zone
 };
 
@@ -354,6 +355,7 @@ function installFailed({ file, error }) {
 }
 listen("pet-install-failed", ({ payload }) => installFailed(payload));
 listen("update-available", ({ payload }) => {
+  react("waiting");
   say(t(`Coquou 有新版本 ${payload.version} 啦，点托盘图标就能更新`, `Coquou ${payload.version} is out! Update from the tray icon`), 6);
 });
 // A pet was deleted in the app window: if it was ours, pick another.
@@ -367,10 +369,15 @@ listen("pets-changed", async ({ payload }) => {
 // is checked and installed, TA looks it over (`review`). Each event carries
 // the whole state, so one missed before this page listened is corrected by
 // the next. A task stays on screen at least TASK_MIN, so a quick install
-// shows a full loop instead of a flicker. Failures make the pet sad for a
-// moment (`failed`), timed from when TA stands idle again, so a failure that
-// lands while the pet is held or falling (as at start-up) is still seen.
-const TASK_MIN = 1.5, SAD_FOR = 2.4; // s
+// shows a full loop instead of a flicker.
+//
+// Reactions are one-offs: sad when something failed (`failed`), asking for
+// the user when something waits for them (`waiting`: a hatch step is ready
+// to look at, an update is out). They are timed from when TA stands idle
+// again, so one that arrives while the pet is held or falling (as at
+// start-up) is still seen, and the pet stays put meanwhile.
+const TASK_MIN = 1.5; // s
+const REACTIONS = { failed: 2.4, waiting: 3 }; // s on screen
 listen("pet-activity", ({ payload }) => {
   const want = payload.running ? "running" : payload.review ? "review" : null;
   if (want) {
@@ -381,8 +388,11 @@ listen("pet-activity", ({ payload }) => {
     pet.taskEnd = Math.max(clock, pet.taskSince + TASK_MIN);
   }
 });
-listen("pet-failed", () => sad());
-function sad() { pet.sadPending = true; touch(clock); settle(); }
+listen("pet-react", ({ payload }) => react(payload));
+function react(name) {
+  if (!Object.hasOwn(REACTIONS, name)) return console.warn("unknown reaction", name);
+  pet.reactionPending = name; touch(clock); settle();
+}
 
 // ---------- pet switching ----------
 // Loading takes a moment; only the most recent request may take effect
@@ -401,7 +411,7 @@ async function usePet(key, remember = true) {
     if (seq !== loadSeq) return false;
     console.error("failed to load pet", key, e);
     emit("?", "#ff6b6b", 28, pet.x, pet.y - renderer.height - 20, 0, -40, 1.2);
-    sad();
+    react("failed");
     return false;
   }
   if (seq !== loadSeq) return false; // superseded by a newer switch
@@ -446,7 +456,10 @@ function think(t, dt) {
   pet.stateT += dt;
   // The click jump takes longer than the joy lasts: start it on landing.
   if (pet.happyPending && pet.state === "idle") { pet.happyPending = false; pet.happyUntil = t + 1.2; }
-  if (pet.sadPending && pet.state === "idle") { pet.sadPending = false; pet.sadUntil = t + SAD_FOR; }
+  if (pet.reactionPending && pet.state === "idle") {
+    pet.reaction = pet.reactionPending; pet.reactionPending = null;
+    pet.reactionUntil = t + REACTIONS[pet.reaction];
+  }
   // Done: linger a moment before strolling off, so the short gaps between
   // one AI request and the next don't send the pet walking back and forth.
   if (pet.task && t >= pet.taskEnd) {
@@ -469,7 +482,7 @@ function think(t, dt) {
   switch (pet.state) {
     case "idle":
       if (!zoneOf(pet.x)) { pet.target = nearestHome(pet.x); setState("walk"); break; }
-      if (pet.task || pet.sadPending || pet.sadUntil > t) break; // stays put while busy or sad
+      if (pet.task || pet.reactionPending || pet.reactionUntil > t) break; // stays put while busy or reacting
       if (prefs.sleepAfter > 0 && t - pet.lastTouch > prefs.sleepAfter && Math.random() < dt * 0.2) { setState("sleep"); break; }
       if (t > nextIdleChat) { nextIdleChat = t + 120 + Math.random() * 180; chat("idle"); }
       if (pet.stateT > pet.nextDecision) {
@@ -626,8 +639,8 @@ listen("settings-changed", loadLang);
   const early = await invoke("overlay_ready").catch((e) => { console.warn("overlay ready", e); return null; });
   const first = early?.pet ?? prefs.pet;
   if (!first || !(await usePet(first))) await useFallback(pets, first);
-  // Their `pet-failed` was sent before anyone listened, so be sad here.
-  for (const f of early?.failed ?? []) { installFailed(f); sad(); }
+  // Their `pet-react` was sent before anyone listened, so react here.
+  for (const f of early?.failed ?? []) { installFailed(f); react("failed"); }
 
   // First run: show the app window once and say where Coquou lives.
   if (!prefs.firstRunDone) {

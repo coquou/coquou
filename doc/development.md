@@ -103,7 +103,7 @@ target/ / gen/           编译输出（不进仓库）
 - 自定义（`custom`）只存在偏好里、不改宠物文件，所以只读的预设和 Codex 宠物也能改。`list_pets` 返回的 `displayName` 已经套用了自定义名字（`ownName` 是宠物自己的，有当前界面语言的 `translations` 时用译名），台词由桌宠窗口按「自定义 → coquou.json（当前语言的 `translations`，再到 `lines`）→ 通用台词」取用；隐藏的宠物只在没有别的可选时才会被自动选中。
 - 「桌面上正在显示哪只宠物」是运行时状态（`report_current_pet`）：记住的宠物不存在时，桌宠会临时换一只，但不改掉用户的选择。
 - 换宠物要先加载素材，所以走桌宠窗口：主窗口发 `pet-command`（`pet:<key>`），托盘菜单发 `reset`、`sleep`。
-- 宠物的「干活 / 检查 / 难过」（Codex 的 `running` / `review` / `failed` 行）反映 Coquou 自己的工作：`ai_generate` 和每次安装宠物包都持有 `activity::begin` 返回的守卫，计数变化时向桌宠窗口发 `pet-activity`（`{ running, review }`，整份状态）；守卫在任何退出路径上都会释放，所以宠物不会卡在「干活」。失败是一次性的 `pet-failed`：安装失败和更新安装失败由 Rust 发，孵化失败由孵化页在重试之后仍失败时发（只有页面知道失败是不是最终的）。
+- 宠物的「干活 / 检查 / 难过」（Codex 的 `running` / `review` / `failed` 行）反映 Coquou 自己的工作：`ai_generate` 和每次安装宠物包都持有 `activity::begin` 返回的守卫，计数变化时向桌宠窗口发 `pet-activity`（`{ running, review }`，整份状态）；守卫在任何退出路径上都会释放，所以宠物不会卡在「干活」。一次性的反应用 `pet-react`（`"failed"` 或 `"waiting"`）：安装失败和更新安装失败由 Rust 发 `failed`；孵化页在某一步重试之后仍失败时发 `failed`、形象或全部动作生成好时发 `waiting`（只有页面知道失败是不是最终的、结果是不是好了）；桌宠窗口收到 `update-available` 时自己发 `waiting`。
 - 启动参数里的文件在桌宠页面开始监听之前就装完了，那时发的事件会丢，所以 `library::Startup` 先记下要显示的宠物和装不上的文件，等页面调 `overlay_ready` 时一起交给它；之后才直接发 `pet-installed` / `pet-install-failed`。「是否已就绪」和这份记录在同一把锁里，页面领走之后不会再有东西记进来。
 - 右键宠物弹出托盘菜单，但不含「退出」（`show_pet_menu`，只接受桌宠窗口调用），点击结果同样走 `tray::on_menu`。
 
