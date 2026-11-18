@@ -37,7 +37,7 @@ const pause = () => { const [a, b] = ACTIVITY[prefs.activity].pause; return a + 
 const pet = {
   x: 300, y: -120, vx: 0, vy: 0,
   facing: 1, face: 1, state: "air", stateT: 0, nextDecision: 2,
-  happyUntil: 0, loved: 0, lookAngle: null, swing: 0, lastTouch: 0,
+  happyPending: false, happyUntil: 0, loved: 0, lookAngle: null, swing: 0, lastTouch: 0,
   task: null, taskSince: 0, taskEnd: 0, sadPending: false, sadUntil: 0, // see "activity" below
   target: null, // x the pet walks back to when it is outside its zone
 };
@@ -175,12 +175,15 @@ function onClick() {
     emit("!", "#ff9f1c", 28, pet.x + 20, pet.y - renderer.height - 20, 0, -40, 0.8);
     chat("wake", true);
   } else {
-    pet.happyUntil = clock + 1.2;
+    pet.happyPending = true; // shown once TA has landed (think)
     hearts(3);
     chat("click");
   }
-  pet.vy = -620; pet.vx = 0;
-  setState("air");
+  pet.vx = 0;
+  // On the ground the jump starts with the row's own crouch and take-off
+  // (jumping frames 0–1, state "hop"); in mid-air it is a plain boost.
+  if (["idle", "walk", "sleep", "land"].includes(pet.state)) setState("hop");
+  else if (pet.state !== "hop") { pet.vy = -620; setState("air"); }
 }
 
 // ---------- power: hidden while a fullscreen app runs, 30 fps on battery ----------
@@ -438,6 +441,8 @@ function nearestHome(x) {
 // ---------- behaviour ----------
 function think(t, dt) {
   pet.stateT += dt;
+  // The click jump takes longer than the joy lasts: start it on landing.
+  if (pet.happyPending && pet.state === "idle") { pet.happyPending = false; pet.happyUntil = t + 1.2; }
   if (pet.sadPending && pet.state === "idle") { pet.sadPending = false; pet.sadUntil = t + SAD_FOR; }
   // Done: linger a moment before strolling off, so the short gaps between
   // one AI request and the next don't send the pet walking back and forth.
@@ -505,6 +510,9 @@ function think(t, dt) {
         if (pet.vy > 500) { pet.vy = -pet.vy * 0.35; pet.vx *= 0.7; }
         else { pet.vx = 0; pet.vy = 0; pet.swing = 0; setState("land"); }
       }
+      break;
+    case "hop":
+      if (pet.stateT >= renderer.frameTime("jumping", 2)) { pet.vy = -620; setState("air"); }
       break;
     case "land":
       if (pet.stateT > 0.35) { pet.nextDecision = 1 + Math.random() * 2; setState("idle"); }

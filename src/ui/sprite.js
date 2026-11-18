@@ -104,6 +104,8 @@ async function loadSpritePet(entry) {
       case "air":
         if (has("fall")) return { name: p.vy < 0 && has("rise") ? "rise" : "fall" };
         return { name: "jumping", frame: p.vy < 0 ? 2 : 3 };
+      // Crouch and take off (frames 0–1), timed from the state like "air".
+      case "hop": return { name: "jumping", frame: Math.min(1, frameOf(anims.jumping, p.stateT * 1000)) };
       case "land": return has("land") ? { name: "land" } : { name: "jumping", frame: 4 };
       case "sleep": return has("sleep") ? { name: "sleep" } : { name: "idle", frame: 0 };
     }
@@ -161,6 +163,8 @@ async function loadSpritePet(entry) {
     height: (anchor.y - box.top) * scale,
     ownLines: (kind) => window.Coquou.petLines(ext, kind), // coquou.json lines, per language
     has, // the overlay skips its own effect where the pet has an animation
+    // Seconds the first `n` frames of an animation take (the click jump's crouch).
+    frameTime: (name, n) => anims[name].durs.slice(0, n).reduce((a, b) => a + b, 0) / 1000,
     draw,
   };
 }
