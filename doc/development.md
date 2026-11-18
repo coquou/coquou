@@ -41,7 +41,7 @@ Windows 上，从打包成 MSIX 的应用里启动的 Coquou（比如在 Claude 
 | `--window` | 启动时打开主窗口 |
 | `--pet <key>` | 用指定宠物启动并记住，例如 `--pet preset:tuantuan` |
 | `<文件>` | 安装 `.pet` / `.zip` / 宠物目录 |
-| `--hatch-selftest <地址> <images\|chat> [transparent] [persist]` | 孵化离线自测，见下 |
+| `--hatch-selftest <地址> <images\|chat> [transparent] [persist] [keep]` | 孵化离线自测，见下 |
 
 ## 目录结构
 
@@ -166,7 +166,7 @@ python3 src/tests/mock-image-api.py 8765
 cargo run -- --hatch-selftest http://127.0.0.1:8765/v1 images
 ```
 
-把 `images` 换成 `chat` 测另一种协议；末尾加 `persist` 额外验证存盘恢复（会清掉未完成的孵化）；模拟接口加 `--openrouter` 模拟没有 `/images/edits` 的服务。日志里出现 `selftest PASS` 即通过。自测会装上一只 `selftest-*` 宠物，测完可在主窗口删除。装好后还会测「从已有宠物继续」：载入刚装的宠物，图集要和装的完全一致（`selftest edit OK`），重新生成一行后替换原宠物；再把同一份图集按旧格式（没有孵化素材）装成 `selftest-*-old`，载入后重新生成待机和一行看向方向，另存为新宠物（`selftest edit old OK`），测完删掉这两只。
+把 `images` 换成 `chat` 测另一种协议；末尾加 `persist` 额外验证存盘恢复（会清掉未完成的孵化）；模拟接口加 `--openrouter` 模拟没有 `/images/edits` 的服务。日志里出现 `selftest PASS` 即通过。自测会装上一只 `selftest-*` 宠物，测完自动删掉，桌面换回原来那只；末尾加 `keep` 则留着它，方便用 `analyze-atlas.py` 检查。装好后还会测「从已有宠物继续」：载入刚装的宠物，图集要和装的完全一致（`selftest edit OK`），重新生成一行后替换原宠物；再把同一份图集按旧格式（没有孵化素材）装成 `selftest-*-old`，载入后重新生成待机和一行看向方向，另存为新宠物（`selftest edit old OK`），测完删掉这两只。
 
 质量指标（色边比例、各行身体宽度是否一致、各行身体左右漂移多少）：
 

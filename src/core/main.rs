@@ -38,7 +38,7 @@ mod windows;
 use std::path::{Path, PathBuf};
 use tauri::{DragDropEvent, Emitter, Manager, WindowEvent};
 
-/// Command line: `coquou [--window] [--pet <key>] [--hatch-selftest <url> <images|chat> [transparent] [persist]] [files…]`.
+/// Command line: `coquou [--window] [--pet <key>] [--hatch-selftest <url> <images|chat> [transparent] [persist] [keep]] [files…]`.
 /// Files are whatever is left after the flags and their values.
 #[derive(Default, Debug, PartialEq)]
 struct Args {
@@ -143,6 +143,7 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             "protocol": rest.get(1).cloned().unwrap_or_else(|| "images".into()),
             "transparent": rest.iter().skip(2).any(|a| a == "transparent"),
             "persist": rest.iter().skip(2).any(|a| a == "persist"),
+            "keep": rest.iter().skip(2).any(|a| a == "keep"),
         });
         windows::open_hatch_selftest(app.handle(), cfg);
     } else if args.window {

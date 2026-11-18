@@ -4,7 +4,7 @@
 // `window.hatchSetReference`).
 (() => {
 const { invoke } = window.__TAURI__.core;
-const { listen } = window.__TAURI__.event;
+const { listen, emit } = window.__TAURI__.event;
 const { t } = window.Coquou;
 const ask = (title, text, ok) => window.coquouConfirm(title, text, ok);
 
@@ -838,12 +838,16 @@ loadHatched();
 loadProfiles().then(() => (window.__COQUOU_SELFTEST__ ? selftest() : offerResume()));
 
 // Dev self-test (`coquou --hatch-selftest <base url> <images|chat>`) runs the
-// whole flow against a mock server (see src/tests/mock-image-api.py).
+// whole flow against a mock server (see src/tests/mock-image-api.py). The
+// pet it installs is deleted at the end, and the desktop pet and the saved
+// pet choice go back to what they were, unless `keep` asks to leave it for
+// inspection.
 async function selftest() {
   const cfg = window.__COQUOU_SELFTEST__;
   if (!cfg) return;
   console.info("selftest start", cfg.protocol);
-  let saved = { id: "" };
+  let saved = { id: "" }, installed = null;
+  const before = await invoke("prefs_get").catch(() => null);
   try {
     saved = await invoke("ai_save_profile", {
       profile: { id: "", name: "selftest-" + cfg.protocol, protocol: cfg.protocol || "images", baseUrl: cfg.selftest, model: "mock-image", quality: null, transparent: !!cfg.transparent },
@@ -874,6 +878,7 @@ async function selftest() {
     $("petId").value = "selftest-" + cfg.protocol;
     const done = await install();
     if (!done) throw new Error("install failed");
+    installed = done.key;
     await selftestEdit(done);
     console.info("selftest PASS " + done.key);
   } catch (e) {
@@ -881,8 +886,34 @@ async function selftest() {
   } finally {
     await invoke("ai_delete_profile", { id: saved.id }).catch(() => {});
     if (persist) await invoke("hatch_clear").catch(() => {});
+    if (installed && !cfg.keep) {
+      if (before?.current && before.current !== installed) await showInstead(before.current, [installed]);
+      await invoke("delete_pet", { key: installed }).catch((e) => console.warn("selftest cleanup", installed, String(e)));
+      // Installing (and switching to the test pets) saved them as the choice.
+      if (before?.pet) await invoke("prefs_set", { patch: { pet: before.pet } }).catch((e) => console.warn("selftest restore pet", String(e)));
+    }
   }
 }
+
+/**
+ * Switch the desktop to `key` and wait until the overlay reports a pet other
+ * than `going` (it reports after loading, or falls back on its own), so the
+ * self-test never deletes a pet the overlay is still loading.
+ */
+async function showInstead(key, going) {
+  const away = (v) => v && !going.includes(v.current);
+  const moved = new Promise((resolve) => {
+    const check = (v) => (away(v) ? resolve() : prefsWaiters.push(check));
+    prefsWaiters.push(check);
+  });
+  await (prefsWatch ??= listen("prefs", ({ payload }) => { for (const w of prefsWaiters.splice(0)) w(payload); }));
+  await emit("pet-command", "pet:" + key);
+  if (!away(await invoke("prefs_get").catch(() => null))) await moved;
+}
+// One listener for the whole self-test: unlistening while an event is on its
+// way makes Tauri warn about a missing callback.
+let prefsWatch = null;
+const prefsWaiters = [];
 
 const rowStates = () => JSON.stringify(Object.fromEntries(Object.entries(st.rows).map(([k, v]) => [k, v.status + (v.atlas ? "(atlas)" : "") + (v.error ? ":" + v.error : "")])));
 
@@ -933,6 +964,8 @@ async function selftestEdit(done) {
     if (kept !== "idle,look-a") throw new Error("saved hatch rows: " + kept);
     console.info("selftest edit old OK", old.key);
   } finally {
+    // Back to the tested pet before its copies go.
+    await showInstead(done.key, [old.key, copy?.key].filter(Boolean));
     for (const k of [old.key, copy?.key]) if (k) await invoke("delete_pet", { key: k }).catch((e) => console.warn("cleanup", k, String(e)));
   }
 }
