@@ -30,6 +30,10 @@ pub struct PetEntry {
     /// The extension file the pet has (`coquou.json`, or the legacy
     /// `perchy.json`), so the frontend never has to probe for it.
     pub ext_file: Option<&'static str>,
+    /// Made by Coquou's AI hatch (`tags` has "ai-hatched"), so the hatch page
+    /// can load it for changes. Read here with the rest of the listing, so
+    /// the page never has to open pets' files that may be gone by then.
+    pub hatched: bool,
 }
 
 /// Where Coquou installs pets.
@@ -106,6 +110,7 @@ fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
             let ext_file = crate::install::EXT_FILES.iter().copied().find(|f| entry.path().join(f).is_file());
             let ext = ext_file.and_then(|f| read_small_json(&entry.path().join(f)));
             let own_name = own_name(&manifest, ext.as_ref(), &id);
+            let hatched = is_hatched(ext.as_ref());
             let key = format!("{source}:{name}");
             let mine = custom.get(&key);
             pets.push(PetEntry {
@@ -116,10 +121,16 @@ fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
                 own_name,
                 source,
                 ext_file,
+                hatched,
             });
         }
     }
     pets
+}
+
+/// The extension file marks the pet as made by the AI hatch.
+fn is_hatched(ext: Option<&serde_json::Value>) -> bool {
+    ext.and_then(|e| e["tags"].as_array()).is_some_and(|tags| tags.iter().any(|t| t == "ai-hatched"))
 }
 
 /// Directory of the pet identified by `key` ("<source>:<dir name>"): a direct
@@ -198,7 +209,7 @@ pub fn read_pet_file(app: AppHandle, key: String, path: String) -> Result<tauri:
 
 #[cfg(test)]
 mod tests {
-    use super::{child_dir, inside, own_name, plain_name};
+    use super::{child_dir, inside, is_hatched, own_name, plain_name};
     use serde_json::json;
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -276,5 +287,13 @@ mod tests {
         for bad in ["", ".hidden", "..", "a/b", "a\\b", "C:", "C:foo", "x:y"] {
             assert!(!plain_name(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn hatched_from_tags() {
+        assert!(is_hatched(Some(&json!({ "tags": ["猫", "ai-hatched"] }))));
+        assert!(!is_hatched(Some(&json!({ "tags": ["猫"] }))));
+        assert!(!is_hatched(Some(&json!({ "tags": "ai-hatched" }))));
+        assert!(!is_hatched(None));
     }
 }

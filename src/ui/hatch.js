@@ -273,15 +273,7 @@ function loadHatched() {
 }
 async function scanHatched() {
   const list = await invoke("list_pets").catch((e) => { console.warn("list pets failed", String(e)); return []; });
-  const found = [];
-  for (const p of list) {
-    if (!p.extFile) continue;
-    try {
-      const ext = await petJson(p.key, p.extFile);
-      if (Array.isArray(ext?.tags) && ext.tags.includes("ai-hatched")) found.push(p);
-    } catch (e) { console.warn("cannot read", p.key, p.extFile, String(e)); }
-  }
-  hatched = found;
+  hatched = list.filter((p) => p.hatched);
 }
 
 /**
