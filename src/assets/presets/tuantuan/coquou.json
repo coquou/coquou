@@ -34,6 +34,19 @@
       "要不要休息一下？",
       "团团想吃小鱼干",
       "（打了个哈欠）"
+    ],
+    "working": [
+      "团团帮你盯着喵",
+      "爪爪忙起来了！",
+      "嗯……让团团看看"
+    ],
+    "failed": [
+      "喵呜……没弄好",
+      "团团尽力了喵"
+    ],
+    "waiting": [
+      "好啦，快来看看喵！",
+      "团团等你哦～"
     ]
   },
   "translations": {
@@ -66,6 +79,19 @@
           "Time for a little break?",
           "Tuantuan wants dried fish",
           "(yawns)"
+        ],
+        "working": [
+          "Tuantuan's on it, meow",
+          "Paws are busy!",
+          "Hmm… let Tuantuan see"
+        ],
+        "failed": [
+          "Mrrow… that didn't work",
+          "Tuantuan tried, meow"
+        ],
+        "waiting": [
+          "Done! Come take a look, meow!",
+          "Tuantuan's waiting for you~"
         ]
       }
     }
