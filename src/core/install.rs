@@ -30,6 +30,8 @@ pub struct Installed {
     pub key: String,
     pub display_name: String,
     pub replaced: bool,
+    /// coquou.json `states` no Coquou behaviour plays (see STATE_NAMES).
+    pub unused_states: Vec<String>,
 }
 
 /// Largest JSON file read from a pet (pet.json, coquou.json).
@@ -306,8 +308,25 @@ fn check_hatch(dir: &Path, value: &serde_json::Value) -> Result<(), String> {
 /// The extension file: `coquou.json`, or `perchy.json` from before the rename.
 pub const EXT_FILES: [&str; 2] = ["coquou.json", "perchy.json"];
 
-/// Check the pet against doc/pet-format.md; returns (id, displayName).
-fn validate(dir: &Path) -> Result<(String, String), String> {
+/// Animation names the overlay plays (src/ui/sprite.js `choose`): the Codex
+/// rows, which `states` may override, and the extension states. Any other
+/// name in `states` is accepted, so packages made for a later Coquou still
+/// install, but it is reported as unused.
+pub const STATE_NAMES: [&str; 17] = [
+    "idle", "running-right", "running-left", "waving", "jumping", "failed", "waiting", "running", "review",
+    "eat", "held", "rise", "fall", "land", "sleep", "happy", "loved",
+];
+
+/// What validating a pet found.
+#[derive(Debug)]
+struct Checked {
+    id: String,
+    display_name: String,
+    unused_states: Vec<String>,
+}
+
+/// Check the pet against doc/pet-format.md.
+fn validate(dir: &Path) -> Result<Checked, String> {
     let text = read_json_text(&dir.join("pet.json")).ok_or(tr!("读不了 pet.json", "Cannot read pet.json"))??;
     let manifest: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| tr!(format!("pet.json 格式错误：{e}"), format!("pet.json is malformed: {e}")))?;
@@ -383,7 +402,12 @@ fn validate(dir: &Path) -> Result<(String, String), String> {
         ext_value = Some(ext);
     }
     let display_name = pets::own_name(&manifest, ext_value.as_ref(), &id);
-    Ok((id, display_name))
+    let unused_states = ext_value
+        .as_ref()
+        .and_then(|ext| ext["states"].as_object())
+        .map(|states| states.keys().filter(|n| !STATE_NAMES.contains(&n.as_str())).cloned().collect())
+        .unwrap_or_default();
+    Ok(Checked { id, display_name, unused_states })
 }
 
 /// Hidden work directories inside the pets root (never listed as pets).
@@ -445,9 +469,12 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, src: &Path) -> Result<Installed, 
             }
         }
         let pet_dir = locate_pet_dir(&staging)?;
-        let (id, display_name) = validate(&pet_dir)?;
+        let Checked { id, display_name, unused_states } = validate(&pet_dir)?;
+        if !unused_states.is_empty() {
+            log::warn!("{id}: coquou.json states never played: {}", unused_states.join(", "));
+        }
         let replaced = swap_into_place(&pet_dir, &root.join(&id), &root)?;
-        Ok(Installed { key: format!("coquou:{id}"), display_name, replaced })
+        Ok(Installed { key: format!("coquou:{id}"), display_name, replaced, unused_states })
     })();
 
     let _ = fs::remove_dir_all(&staging);
@@ -461,7 +488,7 @@ pub fn export<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, Stri
     use zip::write::SimpleFileOptions;
 
     let dir = pets::pet_dir(app, key)?;
-    let (id, _) = validate(&dir)?;
+    let id = validate(&dir)?.id;
     let out_dir = app.path().download_dir().map_err(|e| e.to_string())?;
     let mut out = out_dir.join(format!("{id}.pet"));
     let mut n = 2;
@@ -521,7 +548,7 @@ mod tests {
         for entry in fs::read_dir(&root).expect("src/assets/presets missing") {
             let dir = entry.unwrap().path();
             if dir.is_dir() {
-                let (id, _) = validate(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display()));
+                let id = validate(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())).id;
                 assert_eq!(dir.file_name().unwrap().to_str(), Some(id.as_str()));
                 ids.push(id);
             }
@@ -598,6 +625,13 @@ mod tests {
         let dir = preset_with_ext(r#"{ "hd": "/dev/zero" }"#);
         let err = validate(&dir).unwrap_err();
         assert!(err.contains("hd"), "{err}");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn unknown_states_are_reported_not_refused() {
+        let dir = preset_with_ext(r#"{ "states": { "sleep": { "row": 0 }, "running": { "row": 7 }, "dance": { "row": 3 } } }"#);
+        assert_eq!(validate(&dir).unwrap().unused_states, ["dance"]);
         fs::remove_dir_all(&dir).unwrap();
     }
 

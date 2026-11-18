@@ -344,6 +344,9 @@ listen("pet-installed", async ({ payload }) => {
   if (await usePet(payload.key)) {
     hearts(5);
     say(payload.replaced ? t(`更新好了：${payload.displayName}`, `Updated: ${payload.displayName}`) : t(`安装好了：${payload.displayName}`, `Installed: ${payload.displayName}`), 3);
+    // Tell the pet's author about animations nothing will ever play.
+    const unused = payload.unusedStates ?? [];
+    if (unused.length) say(t(`这些动作 Coquou 用不上：${unused.join("、")}`, `Coquou never plays these animations: ${unused.join(", ")}`), 5);
   }
 });
 function installFailed({ file, error }) {

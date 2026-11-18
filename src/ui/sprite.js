@@ -94,6 +94,8 @@ async function loadSpritePet(entry) {
   let current = null, startedAt = 0;
 
   // Map the overlay's behaviour state to an animation (+ optional frame lock).
+  // A name played here must also be in install.rs STATE_NAMES, which reports
+  // the others in a pet's `states` as unused.
   function choose(p, t) {
     // A file is being dragged over the pet: open wide.
     if (p.dropHover && (p.state === "idle" || p.state === "walk" || p.state === "sleep"))
