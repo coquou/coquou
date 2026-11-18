@@ -237,9 +237,9 @@ select:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent
 .hatch input[type=checkbox] { accent-color: var(--accent); }
 .hrow { display: flex; gap: 8px; }
 .hrow select { flex: 1; }
-.edit-row { align-items: center; margin-bottom: 14px; color: var(--ink-2); font-size: 13px; }
+.edit-note { margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--ink); font-size: 13px; line-height: 1.5; }
 .install-mode { display: flex; flex-direction: column; gap: 6px; }
-.edit-row[hidden], .install-mode[hidden], .install-mode label[hidden] { display: none; }
+.edit-note[hidden], .install-mode[hidden], .install-mode label[hidden] { display: none; }
 .summary { display: flex; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
 .summary[hidden] { display: none; }
 .summary b { display: block; }

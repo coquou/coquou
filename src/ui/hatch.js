@@ -142,8 +142,9 @@ function showReference() {
   drop.innerHTML = "";
   const img = new Image(); img.src = "data:image/png;base64," + st.refB64; drop.append(img);
   const clear = document.createElement("button"); clear.className = "btn"; clear.type = "button"; clear.textContent = t("移除", "Remove");
-  clear.onclick = (e) => { e.stopPropagation(); st.refB64 = st.refData = null; renderDropHint(); };
+  clear.onclick = (e) => { e.stopPropagation(); st.refB64 = st.refData = null; renderDropHint(); renderReset(); };
   drop.append(clear);
+  renderReset();
 }
 function renderDropHint() {
   const drop = $("drop");
@@ -217,6 +218,7 @@ async function offerResume() {
   };
   const acts = document.createElement("div"); acts.className = "acts"; acts.append(go, drop);
   area.append(p, acts);
+  renderReset();
   window.coquouHatchPending?.(true);
 }
 
@@ -249,10 +251,8 @@ async function restoreRun(run) {
   relayout();
   renderCards();
   renderInstallMode();
-  setStatus($("mainStatus"), st.source
-    ? t(`已载入「${st.source.name}」。某个动作不满意就在那一行写上想怎么改，点「重新生成」，只重做那一行；改了描述或参考图后点「重新生成形象」，所有动作都要重做。`,
-      `${st.source.name} is loaded. To fix one animation, say what to change on its row and click “Generate again”: only that row is redone. To change the look, edit the description or reference and click “Generate again” above; then every animation is redone.`)
-    : t("已恢复上次的进度。点「生成全部动作」只会补上还没完成的行。", "Picked up where you left off. “Generate all” only fills in the rows that aren't done."), "ok");
+  renderSource();
+  setStatus($("mainStatus"), st.source ? "" : t("已恢复上次的进度。点「生成全部动作」只会补上还没完成的行。", "Picked up where you left off. “Generate all” only fills in the rows that aren't done."), "ok");
   afterRows();
 }
 
@@ -282,15 +282,6 @@ async function scanHatched() {
     } catch (e) { console.warn("cannot read", p.key, p.extFile, String(e)); }
   }
   hatched = found;
-  renderPicker();
-}
-function renderPicker() {
-  const sel = $("editPick");
-  const keep = sel.value;
-  sel.innerHTML = "";
-  for (const p of hatched) sel.add(new Option(p.displayName, p.key));
-  if (hatched.some((p) => p.key === keep)) sel.value = keep;
-  $("editRow").hidden = !hatched.length;
 }
 
 /**
@@ -347,9 +338,12 @@ async function editPet(key) {
   console.info("editing", key, h ? "with hatch material" : "from the atlas only");
 }
 
+/** A generation is running (the look or any row). */
+const busy = () => $("genBase").disabled || Object.values(st.rows).some((r) => r.status === "run");
+
 async function startEdit(key) {
   const el = $("mainStatus");
-  if ($("genBase").disabled || Object.values(st.rows).some((r) => r.status === "run")) {
+  if (busy()) {
     setStatus(el, t("正在生成，等这一轮完成再载入。", "Still generating; load it once this round is done."), "bad");
     return;
   }
@@ -359,13 +353,64 @@ async function startEdit(key) {
   try { await editPet(key); }
   catch (e) { setStatus(el, t("载入失败：", "Could not load: ") + e, "bad"); console.error("edit failed", key, String(e)); }
 }
-$("editLoad").addEventListener("click", () => $("editPick").value && startEdit($("editPick").value));
-// The pet library's 「在孵化里修改」 button (app.js).
+// The only way in: the pet library's 「在孵化页修改」 button (app.js).
 window.hatchEditPet = async (key) => {
   if (!hatched.some((p) => p.key === key)) await loadHatched();
-  $("editPick").value = key;
   return startEdit(key);
 };
+
+/**
+ * The notice that a pet is being changed, and the header button that ends
+ * it (取消修改) or wipes a new hatch (清空重来). The button shows once there
+ * is something to clear.
+ */
+function renderSource() {
+  const src = st.source;
+  $("editNote").hidden = !src;
+  if (src) $("editNote").textContent = t(
+    `正在修改「${src.name}」。不满意的动作在那一行写上想怎么改，点「重新生成」只重做那一行；改了描述或参考图后点「重新生成形象」，所有动作都要重做。改好后在「⑤ 安装」里替换原来的宠物或另存为新宠物。`,
+    `You're changing ${src.name}. To fix one animation, say what to change on its row and click “Generate again”: only that row is redone. To change the look, edit the description or reference and click “Generate again” in step 3; then every animation is redone. When you're done, replace the old pet or save a new one in step 5.`);
+  renderReset();
+}
+function renderReset() {
+  const b = $("hatchReset");
+  b.textContent = st.source ? t("取消修改", "Cancel changes") : t("清空重来", "Start over");
+  b.hidden = !(st.source || st.baseB64 || st.refB64 || $("petName").value.trim() || $("petDesc").value.trim()
+    || $("baseArea").classList.contains("resume"));
+}
+
+/** Back to an empty hatch page; the saved run (and its images) go too. */
+async function resetHatch() {
+  const el = $("mainStatus");
+  if (busy()) {
+    setStatus(el, t("正在生成，等这一轮完成再清空。", "Still generating; clear it once this round is done."), "bad");
+    return;
+  }
+  const made = st.baseB64 || $("baseArea").classList.contains("resume");
+  if (made && !(await (st.source
+    ? ask(t(`取消对「${st.source.name}」的修改？`, `Cancel your changes to ${st.source.name}?`),
+      t("这次生成的图片会删掉，无法恢复；原来的宠物不受影响。", "The images made this time are deleted for good; the pet itself is left as it was."), t("取消修改", "Cancel changes"))
+    : ask(t("清空这次孵化？", "Clear this hatch?"),
+      t("已经生成的图片会删掉，无法恢复；描述和参考图也会清空。", "The images made so far are deleted for good, and the description and reference are cleared."), t("清空", "Clear"))))) return;
+  if (persist) await invoke("hatch_clear").catch((e) => console.warn("hatch clear failed", String(e)));
+  Object.assign(st, { refB64: null, refData: null, key: "green", baseB64: null, rows: {}, atlasB64: null, hdB64: null, source: null, petAtlas: null });
+  notes.clear();
+  $("petName").value = $("petDesc").value = $("petId").value = "";
+  $("style").value = "auto";
+  $("withLook").checked = true;
+  updateEstimate();
+  renderDropHint();
+  renderBaseHint();
+  renderGenBase();
+  renderInstallMode();
+  $("rowsArea").hidden = $("finalArea").hidden = true;
+  for (const id of ["mainStatus", "rowsStatus", "installStatus"]) setStatus($(id), "");
+  renderSource();
+  window.coquouHatchPending?.(false);
+}
+$("hatchReset").addEventListener("click", resetHatch);
+// The header button appears as soon as the form has something in it.
+for (const id of ["petName", "petDesc"]) $(id).addEventListener("input", renderReset);
 listen("pet-installed", loadHatched);
 listen("pets-changed", loadHatched);
 
@@ -423,6 +468,7 @@ function renderBaseHint() {
   const area = $("baseArea");
   area.className = "empty";
   area.textContent = t("填好上面的接口和描述，点「生成形象」。", "Fill in the service and description above, then click “Generate the look”.");
+  renderReset();
 }
 
 function renderBase(base) {
@@ -448,6 +494,7 @@ function renderBase(base) {
   renderCards();
   $("rowsArea").hidden = false;
   $("finalArea").hidden = true;
+  renderReset();
 }
 
 // What the user wants changed per row, used when regenerating it.
@@ -782,6 +829,7 @@ window.hatchRelabel = () => {
   updateEstimate();
   renderCards();
   if (st.source) renderReplaceText();
+  renderSource();
 };
 
 // ---------- start ----------

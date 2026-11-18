@@ -78,8 +78,10 @@
       <header class="head" data-tauri-drag-region>
         <h1 data-en="Hatch">孵化</h1>
         <span class="head-note" data-en="Turn a description or a picture into a desktop pet that walks and jumps, with AI">用 AI 把一段描述或一张图，变成一只会走会跳的桌面宠物</span>
+        <div class="tools"><button class="btn" id="hatchReset" type="button" hidden></button></div>
       </header>
       <div class="scroll hatch">
+        <p class="edit-note" id="editNote" hidden></p>
         <!-- ① AI 接口 -->
         <section class="step-card">
           <h2 data-en="AI service"><i>1</i>AI 接口<small data-en="An OpenAI-compatible image API, such as OpenAI or OpenRouter">OpenAI 兼容的图像接口，例如 OpenAI、OpenRouter</small></h2>
@@ -125,11 +127,6 @@
         <!-- ② 宠物 -->
         <section class="step-card">
           <h2 data-en="Describe your pet"><i>2</i>描述你的宠物</h2>
-          <div class="hrow edit-row" id="editRow" hidden>
-            <span data-en="Or change a pet you hatched:">或者修改孵化过的宠物：</span>
-            <select id="editPick"></select>
-            <button class="btn" id="editLoad" type="button" data-en="Load">载入</button>
-          </div>
           <div class="pet-form">
             <div class="fields">
               <label data-en="Name">名字<input type="text" id="petName" placeholder="例如：橘子" data-en-placeholder="e.g. Clementine" /></label>
