@@ -387,11 +387,13 @@ async function resetHatch() {
     return;
   }
   const made = st.baseB64 || $("baseArea").classList.contains("resume");
-  if (made && !(await (st.source
+  const ok = await (st.source
     ? ask(t(`取消对「${st.source.name}」的修改？`, `Cancel your changes to ${st.source.name}?`),
       t("这次生成的图片会删掉，无法恢复；原来的宠物不受影响。", "The images made this time are deleted for good; the pet itself is left as it was."), t("取消修改", "Cancel changes"))
-    : ask(t("清空这次孵化？", "Clear this hatch?"),
-      t("已经生成的图片会删掉，无法恢复；描述和参考图也会清空。", "The images made so far are deleted for good, and the description and reference are cleared."), t("清空", "Clear"))))) return;
+    : ask(t("清空这次孵化？", "Clear this hatch?"), made
+      ? t("已经生成的图片会删掉，无法恢复；名字、描述和参考图也会清空。", "The images made so far are deleted for good, and the name, description and reference are cleared.")
+      : t("填好的名字、描述和参考图都会清空。", "The name, description and reference you entered are cleared."), t("清空", "Clear")));
+  if (!ok) return;
   if (persist) await invoke("hatch_clear").catch((e) => console.warn("hatch clear failed", String(e)));
   Object.assign(st, { refB64: null, refData: null, key: "green", baseB64: null, rows: {}, atlasB64: null, hdB64: null, source: null, petAtlas: null });
   notes.clear();
