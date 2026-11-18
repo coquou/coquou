@@ -5,7 +5,9 @@ Implements POST /v1/images/generations, /v1/images/edits (multipart) and
 /v1/chat/completions (modalities image). It reads the frame count and grid
 from the prompt and draws simple "pets" (body + head + eyes) on chroma green,
 moving them per frame (bob / jump / walk). For jumping it draws one extra pose
-in the spare cell so the extractor's "extra pose" warning is exercised.
+in the spare cell so the extractor's "extra pose" warning is exercised, and
+paints the jump sheet like a real gpt-image-2 failure: a dark backdrop with a
+block of the key colour behind each pose (the matte has to remove both).
 Like OpenRouter with gpt-image-2, it rejects `background: transparent` and `n`.
 The first "failed" sheet is two poses short (exercises the automatic retry).
 
@@ -71,8 +73,14 @@ def draw(prompt, size):
     if kind == "failed" and SEEN[kind] == 1:
         draw_n = n - 2
     cw, ch = w / cols, h / rows
+    if kind == "jumping":
+        buf[:] = bytes((32, 30, 36)) * (w * h)
     for i in range(draw_n):
         cx, cy = (i % cols + 0.5) * cw, (i // cols) * ch
+        if kind == "jumping":
+            x0, x1, y0, y1 = int(cx - cw * 0.42), int(cx + cw * 0.42), int(cy + ch * 0.04), int(cy + ch * 0.96)
+            for y in range(y0, y1):
+                buf[(y * w + x0) * 3:(y * w + x1) * 3] = bytes(BG) * (x1 - x0)
         pet(buf, w, h, cx, cy + ch * 0.9, ch * 0.42, (i % n) / n, kind)
     return png(w, h, buf)
 

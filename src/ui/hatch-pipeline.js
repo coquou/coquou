@@ -16,6 +16,7 @@ const HATCH = (() => {
   const BODY_BAND = 0.55; // upper share of a frame whose pixels give its horizontal anchor
 
   const KEY_RGB = { green: [0, 255, 0], magenta: [255, 0, 255] };
+  const KEY_LEFT_MAX = 0.05; // key-coloured share of a frame above which the cut-out failed
   const KEY_WORDS = {
     green: "pure chroma-key green (#00FF00)",
     magenta: "pure chroma-key magenta (#FF00FF)",
@@ -402,17 +403,47 @@ const HATCH = (() => {
     return c;
   }
 
-  /** Generated sheet (b64) → normalised cells for one state. */
-  async function processSheet(b64, state) {
+  /** Share of a frame's opaque pixels that are clearly the key colour. */
+  function keyShare(frame, key) {
+    const d = frame.image.data;
+    let opaque = 0, keyed = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 128) continue;
+      opaque++;
+      const [r, g, b] = [d[i], d[i + 1], d[i + 2]];
+      if (key === "green" ? g > Math.max(r, b) + 60 : Math.min(r, b) > g + 60) keyed++;
+    }
+    return opaque ? keyed / opaque : 0;
+  }
+
+  /**
+   * Generated sheet (b64) → normalised cells for one state. `key` is the
+   * chroma colour the prompt asked for. Returns warnings (shown, install
+   * allowed) and errors (the row counts as failed: retried, blocks install).
+   */
+  async function processSheet(b64, state, key) {
     const img = pixels(await decode(b64));
     const bg = estimateBackground(img);
-    const warnings = [];
-    if (!bg.transparent && bg.kind === "other") warnings.push(t("背景不是纯色抠像底，抠图可能不干净", "The background isn't a flat key colour, so the cut-out may be rough"));
-    matte(img, bg);
+    const warnings = [], errors = [];
+    if (!bg.transparent && bg.kind === "other") {
+      warnings.push(t("背景不是纯色抠像底，抠图可能不干净", "The background isn't a flat key colour, so the cut-out may be rough"));
+      // Models sometimes paint their own backdrop and still put a block of
+      // the key colour behind each pose; key that colour out as well.
+      matte(img, bg);
+      matte(img, { rgb: KEY_RGB[key], kind: key, transparent: false });
+    } else {
+      matte(img, bg);
+    }
     const split = splitSheet(img, state.frames, layoutFor(state.frames));
     warnings.push(...split.warnings);
+    const missing = split.frames.filter((f) => !f).length;
+    if (missing) errors.push(t(`缺了 ${missing} 帧`, `${missing} frame(s) missing`));
+    // Whatever survived the matte in the key colour is backdrop, not pet.
+    split.frames.forEach((f, i) => {
+      if (f && keyShare(f, key) > KEY_LEFT_MAX) errors.push(t(`第 ${i + 1} 帧带着一块抠像底色，没抠干净`, `Frame ${i + 1} still carries a patch of the key colour`));
+    });
     const placed = placeRow(split.frames, { lift: !!state.airborne });
-    return { frames: split.frames, cells: placed.map((p) => cellCanvas(p)), warnings, ok: split.frames.every(Boolean) };
+    return { frames: split.frames, cells: placed.map((p) => cellCanvas(p)), warnings, errors, ok: !errors.length };
   }
 
   /** The base image as a single neutral cell (for previews). */

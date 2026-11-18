@@ -370,9 +370,9 @@ const depsOf = (s) => (s.look ? ["look-cardinals"] : []);
 
 /** Turn a generated sheet into frames for state `s` (and its mirror). */
 async function applySheet(s, raw, save = true) {
-  const out = await HATCH.processSheet(raw, s);
+  const out = await HATCH.processSheet(raw, s, st.key);
   st.rows[s.id] = { status: out.ok && !out.warnings.length ? "ok" : out.ok ? "warn" : "bad", frames: out.frames, cells: out.cells, warnings: out.warnings, raw,
-    error: out.ok ? "" : t("帧数不够：", "Not enough frames: ") + out.warnings.join(t("；", "; ")) };
+    error: out.ok ? "" : out.errors.concat(out.warnings).join(t("；", "; ")) };
   for (const m of S.filter((x) => x.mirrorOf === s.id))
     st.rows[m.id] = { status: st.rows[s.id].status === "bad" ? "bad" : "ok", frames: out.frames, cells: HATCH.mirrorCells(out.cells), warnings: [], error: st.rows[s.id].error };
   if (save) { saveImage("row-" + s.id, raw); saveMeta(); }
@@ -398,7 +398,7 @@ async function genRow(s, attempt = 1) {
     const refs = [st.baseB64, ...depsOf(s).map((d) => st.rows[d].raw)];
     const raw = await generate(prompt, refs, HATCH.layoutFor(s.frames).size);
     const status = await applySheet(s, raw);
-    console.info("row", s.id, status, (st.rows[s.id].warnings || []).join("; "));
+    console.info("row", s.id, status, status === "bad" ? st.rows[s.id].error : (st.rows[s.id].warnings || []).join("; "));
     retry = status === "bad";
   } catch (e) {
     st.rows[s.id] = { status: "bad", error: String(e) };
