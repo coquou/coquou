@@ -153,16 +153,14 @@
               <input type="file" id="file" accept="image/*" hidden />
             </div>
           </div>
-          <div class="go">
-            <span class="est" id="estimate"></span>
-            <button class="btn primary big" id="genBase" type="button"></button>
-          </div>
-          <div class="status" id="mainStatus"></div>
         </section>
 
         <!-- ③④⑤ 结果 -->
         <section class="step-card" id="baseCard">
-          <h2 data-en="Look"><i>3</i>形象</h2>
+          <h2 data-en="Look"><i>3</i>形象<small id="estimate"></small>
+            <span class="h2-tools"><button class="btn primary" id="genBase" type="button"></button></span>
+          </h2>
+          <div class="status" id="mainStatus"></div>
           <div id="baseArea" class="empty"></div>
         </section>
         <section class="step-card" id="rowsArea" hidden>
