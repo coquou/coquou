@@ -210,6 +210,7 @@ PNG 或 WebP，透明背景。行定义：
 | 睡觉 | `sleep` | `idle` 第 0 帧 + Zzz 粒子 |
 | 被单击 | `happy` | `waving` |
 | 被撸 | `loved` | `waving` |
+| 有文件拖到身上（待机、走路或睡觉时） | `eat` | `waiting` |
 | （预留）Agent 状态联动 | — | `running` / `review` / `waiting` / `failed` |
 
 ## 5. 宠物搜索路径
