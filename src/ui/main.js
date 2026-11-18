@@ -292,7 +292,7 @@ listen("pet-command", ({ payload }) => {
   }
 });
 
-// ---------- size (remembered per pet) ----------
+// ---------- size (one setting for every pet) ----------
 let baseRenderer = renderer, petKey = "", sizeMul = 1;
 function scaled(r, mul) {
   if (mul === 1) return r;

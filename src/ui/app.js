@@ -16,7 +16,7 @@ const usePet = (key) => emit("pet-command", "pet:" + key);
 const setPrefs = (patch) => invoke("prefs_set", { patch }).catch((e) => toast(t("设置失败：", "Could not change the setting: ") + e, true));
 // Run a command; show its error instead of losing it.
 const act = (cmd, args, what) => invoke(cmd, args).catch((e) => toast(`${what}：${e}`, true));
-// Sizes are per pet: wait until the overlay says which pet is shown.
+// One size for every pet (prefs.rs `size`).
 const setSize = (v) => setPrefs({ size: Number(v) });
 
 // Choices as [value, label]; functions so the labels follow the language.
