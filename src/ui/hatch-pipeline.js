@@ -37,12 +37,13 @@ const HATCH = (() => {
 
   // Codex v2 rows. `mirrorOf` rows are derived, not generated. `label` is
   // the name shown on the hatch page, in the current interface language.
+  // `airborne` rows keep each frame's height above the ground line.
   const STATES = [
     { id: "idle", get label() { return t("待机", "Idle"); }, row: 0, frames: 6, action: "a calm idle loop: gentle breathing and one blink, staying in place in its natural stance, facing the viewer" },
     { id: "running-right", get label() { return t("向右走", "Walk right"); }, row: 1, frames: 8, action: "walking to the RIGHT side of the picture (viewer's right), side or three-quarter view facing right, a clear alternating step cycle" },
     { id: "running-left", get label() { return t("向左走", "Walk left"); }, row: 2, frames: 8, mirrorOf: "running-right" },
     { id: "waving", get label() { return t("挥手", "Wave"); }, row: 3, frames: 4, action: "a friendly greeting wave with one hand or paw: start, raise, wave, lower" },
-    { id: "jumping", get label() { return t("跳", "Jump"); }, row: 4, frames: 5, action: "a happy jump: crouch, take off, peak high in the air, come down, land and settle. Keep the same ground line; at the peak the feet are clearly above it" },
+    { id: "jumping", get label() { return t("跳", "Jump"); }, row: 4, frames: 5, action: "a happy jump: crouch, take off, peak high in the air, come down, land and settle. Keep the same ground line; at the peak the feet are clearly above it", airborne: true },
     { id: "failed", get label() { return t("失败", "Sad"); }, row: 5, frames: 8, action: "a sad, deflated reaction to an error: droops and slumps, small sigh, then recovers a little. No tears or effects flying off the body" },
     { id: "waiting", get label() { return t("等待", "Waiting"); }, row: 6, frames: 6, action: "expectantly waiting, looking up at the viewer as if asking for attention, slight sway" },
     { id: "running", get label() { return t("干活中", "Working"); }, row: 7, frames: 6, action: "busy working on a task (not literal running): typing, tinkering or thinking hard, an energetic loop" },
@@ -351,12 +352,15 @@ const HATCH = (() => {
    * the character at the same size; without it the row sizes itself from
    * its body height (previews).
    */
-  function placeRow(frames, { lift = true, scale = null } = {}) {
+  function placeRow(frames, { lift = false, scale = null } = {}) {
     const real = frames.filter(Boolean);
     if (!real.length) return [];
-    // Each row of the sheet has its own ground line (the prompt asks for one
-    // ground line per row, and models place the rows independently), so a
-    // frame's lift is measured against the lowest feet in its own sheet row.
+    // Only an airborne row (the jump) keeps how high a frame is drawn above
+    // the ground; every other frame stands on the ground line, because models
+    // place poses a few pixels higher or lower in their cells at random and
+    // a walk then bobs out of step. Each row of the sheet has its own ground
+    // line (models place the rows independently), so a lift is measured
+    // against the lowest feet in its own sheet row.
     const ground = new Map();
     for (const f of real) ground.set(f.sheetRow, Math.max(ground.get(f.sheetRow) ?? 0, f.bottom));
     // Body size decides the scale; a jump that would leave the cell keeps the
@@ -407,7 +411,7 @@ const HATCH = (() => {
     matte(img, bg);
     const split = splitSheet(img, state.frames, layoutFor(state.frames));
     warnings.push(...split.warnings);
-    const placed = placeRow(split.frames, { lift: !state.look && !state.cardinal });
+    const placed = placeRow(split.frames, { lift: !!state.airborne });
     return { frames: split.frames, cells: placed.map((p) => cellCanvas(p)), warnings, ok: split.frames.every(Boolean) };
   }
 
@@ -439,7 +443,7 @@ const HATCH = (() => {
       if (!src) continue;
       const size = rowSize(src);
       const scale = idleScale && size ? idleScale * idleSize / size : null;
-      const places = placeRow(src, { lift: !st.look && !st.cardinal, scale }).map((p) => p && { ...p, mirror: !!st.mirrorOf });
+      const places = placeRow(src, { lift: !!st.airborne, scale }).map((p) => p && { ...p, mirror: !!st.mirrorOf });
       out[st.id] = { cells: places.map((p) => cellCanvas(p, p?.mirror)), places };
     }
     return out;
