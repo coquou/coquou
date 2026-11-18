@@ -71,6 +71,14 @@ const HATCH = (() => {
     return { cols: 4, rows: 2, size: "1536x1024" };
   }
 
+  // Codex holds the walk's last frame for 220 ms, so a walk stops for a
+  // moment every cycle. A hatched walk is drawn as an even loop: its
+  // coquou.json plays both walk rows at 120 ms a frame instead.
+  const EVEN_WALK = Object.fromEntries(["running-right", "running-left"].map((id) => {
+    const frames = STATES.find((x) => x.id === id).frames;
+    return [id, { row: window.Coquou.ROWS[id][0], frames, durations: Array(frames).fill(120) }];
+  }));
+
   // ---------- prompts ----------
   function basePrompt({ description, style, key, hasReference }) {
     return [
@@ -583,7 +591,7 @@ const HATCH = (() => {
   }
 
   return {
-    CELL_W, CELL_H, STATES, layoutFor, basePrompt, sheetPrompt,
+    CELL_W, CELL_H, STATES, EVEN_WALK, layoutFor, basePrompt, sheetPrompt,
     decode, pixels, toPngB64, bytesToB64, chooseKey,
     processSheet, processBase, composeAtlas, layoutAll,
     atlasFrames, atlasErrors, sameCells, framesSheet,

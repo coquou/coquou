@@ -756,8 +756,10 @@ async function keptExt(fresh) {
   catch (e) { console.warn("cannot read the replaced pet's", extFile, String(e)); }
   if (!old || typeof old !== "object") return fresh;
   const merged = { ...old, ...fresh, tags: [...new Set([...(Array.isArray(old.tags) ? old.tags : []), ...fresh.tags])] };
-  const states = Object.entries(old.states || {}).filter(([, v]) => !v?.sheet);
-  if (states.length) merged.states = Object.fromEntries(states); else delete merged.states;
+  // The old pet's states on rows of the atlas stay (the layout is the same);
+  // ones with their own sheets don't come along. The hatch's own win.
+  const states = { ...Object.fromEntries(Object.entries(old.states || {}).filter(([, v]) => !v?.sheet)), ...fresh.states };
+  if (Object.keys(states).length) merged.states = states; else delete merged.states;
   return merged;
 }
 
@@ -770,7 +772,7 @@ async function install() {
     if (st.source && !replace && (await coquouIds()).has(id))
       throw new Error(t("已经有宠物在用这个 ID 了，换一个吧", "Another pet already uses this ID; pick another one"));
     const { files, hatch } = hatchMaterial();
-    let ext = { format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model }, hatch };
+    let ext = { format: "coquou/1", hd: "spritesheet@2x.png", tags: ["ai-hatched"], states: HATCH.EVEN_WALK, generator: { tool: "coquou-hatch", protocol: p?.protocol, model: p?.model }, hatch };
     if (replace) ext = await keptExt(ext);
     const done = await invoke("install_generated", {
       id,
