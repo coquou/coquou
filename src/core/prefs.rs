@@ -36,8 +36,9 @@ pub enum Activity {
     Lively,
 }
 
-/// Size multipliers the UI offers; anything else is rejected.
-pub const SIZES: [f64; 5] = [0.75, 1.0, 1.3, 1.6, 2.0];
+/// Size multipliers the UI offers (超小 / 小 / 标准 / 大 / 超大); anything
+/// else is rejected, and older saved values snap to the nearest one.
+pub const SIZES: [f64; 5] = [0.5, 0.75, 1.0, 1.5, 2.0];
 /// "Doze off after" delays the UI offers, in seconds (0 = never); anything
 /// else is rejected, and older saved values snap to the nearest one.
 pub const SLEEP_CHOICES: [u32; 3] = [30, 1800, 0];
@@ -65,8 +66,12 @@ pub struct Custom {
 pub struct Prefs {
     /// The pet the user picked (pet key, e.g. "preset:tuantuan").
     pub pet: Option<String>,
-    /// Size multiplier per pet key; missing = 1.
-    pub sizes: BTreeMap<String, f64>,
+    /// Display size multiplier, one of `SIZES`, shared by every pet.
+    pub size: f64,
+    /// Size per pet key, saved by versions before the size became shared;
+    /// read once by `upgrade` and never written back.
+    #[serde(rename = "sizes", skip_serializing)]
+    pub old_sizes: BTreeMap<String, f64>,
     /// The user's name / lines / hidden flag per pet key.
     pub custom: BTreeMap<String, Custom>,
     pub zone: Zone,
@@ -85,12 +90,13 @@ impl Default for Prefs {
     fn default() -> Self {
         Prefs {
             pet: None,
-            sizes: BTreeMap::new(),
+            size: 1.0,
+            old_sizes: BTreeMap::new(),
             custom: BTreeMap::new(),
             zone: Zone::default(),
             activity: Activity::default(),
             sleep_after: 1800,
-            chatter: true,
+            chatter: false,
             first_run_done: false,
             welcome_dismissed: false,
         }
@@ -102,8 +108,7 @@ impl Default for Prefs {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Patch {
     pet: Option<String>,
-    /// Size of one pet: `{ "pet": key, "value": multiplier }`.
-    size: Option<SizePatch>,
+    size: Option<f64>,
     /// Customise one pet: `{ "pet": key, "name"?, "lines"?, "hidden"? }`.
     custom: Option<CustomPatch>,
     zone: Option<Zone>,
@@ -112,12 +117,6 @@ pub struct Patch {
     chatter: Option<bool>,
     first_run_done: Option<bool>,
     welcome_dismissed: Option<bool>,
-}
-
-#[derive(Deserialize)]
-pub struct SizePatch {
-    pet: String,
-    value: f64,
 }
 
 /// Fields left out stay as they are; an empty name or an empty lines object
@@ -172,9 +171,9 @@ impl CustomPatch {
 
 impl Patch {
     fn apply(self, p: &mut Prefs) -> Result<(), String> {
-        if let Some(s) = &self.size {
-            if !SIZES.iter().any(|v| (v - s.value).abs() < 1e-6) {
-                return Err(format!("unsupported size {}", s.value));
+        if let Some(s) = self.size {
+            if !SIZES.iter().any(|v| (v - s).abs() < 1e-6) {
+                return Err(format!("unsupported size {s}"));
             }
         }
         if self.sleep_after.is_some_and(|s| !SLEEP_CHOICES.contains(&s)) {
@@ -187,11 +186,7 @@ impl Patch {
             p.pet = Some(pet);
         }
         if let Some(s) = self.size {
-            if (s.value - 1.0).abs() < 1e-6 {
-                p.sizes.remove(&s.pet);
-            } else {
-                p.sizes.insert(s.pet, s.value);
-            }
+            p.size = s;
         }
         if let Some(c) = self.custom {
             c.apply(&mut p.custom);
@@ -220,15 +215,21 @@ impl Patch {
 
 impl Prefs {
     /// Settings saved by older versions: the built-in cat became the preset
-    /// 团团, and the doze-off delays changed to 30 s / 30 min / never.
+    /// 团团, the size per pet became one shared size (the chosen pet's), and
+    /// the doze-off delays changed to 30 s / 30 min / never.
     pub fn upgrade(&mut self) {
         const OLD: &str = "builtin";
         const NEW: &str = "preset:tuantuan";
+        if let Some(size) = self.pet.as_deref().and_then(|k| self.old_sizes.get(k)) {
+            self.size = *size;
+        }
+        self.old_sizes.clear();
         if self.pet.as_deref() == Some(OLD) {
             self.pet = Some(NEW.into());
         }
-        if let Some(size) = self.sizes.remove(OLD) {
-            self.sizes.insert(NEW.into(), size);
+        if !SIZES.iter().any(|v| (v - self.size).abs() < 1e-6) {
+            let s = self.size;
+            self.size = SIZES.into_iter().min_by(|a, b| (a - s).abs().total_cmp(&(b - s).abs())).unwrap_or(1.0);
         }
         if !SLEEP_CHOICES.contains(&self.sleep_after) {
             let s = self.sleep_after;
@@ -237,11 +238,10 @@ impl Prefs {
     }
 }
 
-/// A deleted pet: drop its size and customisation and, if it was the chosen
-/// one, the choice.
+/// A deleted pet: drop its customisation and, if it was the chosen one, the
+/// choice.
 pub fn forget_pet<R: Runtime>(app: &AppHandle<R>, key: &str) {
     let result = crate::settings::update(app, |s| {
-        s.prefs.sizes.remove(key);
         s.prefs.custom.remove(key);
         if s.prefs.pet.as_deref() == Some(key) {
             s.prefs.pet = None;
@@ -261,21 +261,17 @@ fn current<R: Runtime>(app: &AppHandle<R>) -> String {
     app.try_state::<Current>().map(|c| lock(&c.0).clone()).unwrap_or_default()
 }
 
-/// What windows see: the saved prefs plus the pet on screen and its size.
+/// What windows see: the saved prefs plus the pet on screen.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct View {
     #[serde(flatten)]
     prefs: Prefs,
     current: String,
-    size: f64,
 }
 
 fn view<R: Runtime>(app: &AppHandle<R>) -> View {
-    let prefs = crate::settings::get(app).prefs;
-    let current = current(app);
-    let size = prefs.sizes.get(&current).copied().unwrap_or(1.0);
-    View { prefs, current, size }
+    View { prefs: crate::settings::get(app).prefs, current: current(app) }
 }
 
 fn broadcast<R: Runtime>(app: &AppHandle<R>) {
@@ -324,19 +320,18 @@ mod tests {
         assert_eq!(p.zone, Zone::Left);
         assert_eq!(p.activity, Activity::Normal);
         assert_eq!(p.sleep_after, 1800);
-        assert!(p.chatter);
+        assert_eq!(p.size, 1.0);
+        assert!(!p.chatter);
     }
 
     #[test]
     fn patch_applies_and_validates() {
         let mut p = Prefs::default();
-        patch(r#"{ "size": { "pet": "preset:tuantuan", "value": 1.3 }, "activity": "lively" }"#).unwrap().apply(&mut p).unwrap();
-        assert_eq!(p.sizes.get("preset:tuantuan"), Some(&1.3));
+        patch(r#"{ "size": 1.5, "activity": "lively" }"#).unwrap().apply(&mut p).unwrap();
+        assert_eq!(p.size, 1.5);
         assert_eq!(p.activity, Activity::Lively);
-        // Back to 1 drops the entry instead of storing the default.
-        patch(r#"{ "size": { "pet": "preset:tuantuan", "value": 1 } }"#).unwrap().apply(&mut p).unwrap();
-        assert!(p.sizes.is_empty());
-        assert!(patch(r#"{ "size": { "pet": "x", "value": 7 } }"#).unwrap().apply(&mut p).is_err());
+        assert!(patch(r#"{ "size": 1.3 }"#).unwrap().apply(&mut p).is_err());
+        assert!(patch(r#"{ "size": { "pet": "x", "value": 1 } }"#).is_err());
         assert!(patch(r#"{ "sleepAfter": 99999 }"#).unwrap().apply(&mut p).is_err());
         assert!(patch(r#"{ "sleepAfter": 45 }"#).unwrap().apply(&mut p).is_err());
         patch(r#"{ "sleepAfter": 1800 }"#).unwrap().apply(&mut p).unwrap();
@@ -367,10 +362,26 @@ mod tests {
 
     #[test]
     fn builtin_becomes_preset() {
-        let mut p: Prefs = serde_json::from_str(r#"{ "pet": "builtin", "sizes": { "builtin": 1.3 } }"#).unwrap();
+        let mut p: Prefs = serde_json::from_str(r#"{ "pet": "builtin", "sizes": { "builtin": 2 } }"#).unwrap();
         p.upgrade();
         assert_eq!(p.pet.as_deref(), Some("preset:tuantuan"));
-        assert_eq!(p.sizes.get("preset:tuantuan"), Some(&1.3));
+        assert_eq!(p.size, 2.0);
+    }
+
+    #[test]
+    fn size_per_pet_becomes_the_chosen_pets() {
+        // Old offered sizes 1.3 and 1.6 snap to 大 (1.5); other pets' sizes go.
+        for (old, new) in [(0.75, 0.75), (1.3, 1.5), (1.6, 1.5), (2.0, 2.0)] {
+            let json = format!(r#"{{ "pet": "codex:a", "sizes": {{ "codex:a": {old}, "codex:b": 0.75 }} }}"#);
+            let mut p: Prefs = serde_json::from_str(&json).unwrap();
+            p.upgrade();
+            assert_eq!(p.size, new, "{old}");
+            assert!(p.old_sizes.is_empty());
+            assert!(!serde_json::to_string(&p).unwrap().contains("sizes"));
+        }
+        let mut p: Prefs = serde_json::from_str(r#"{ "sizes": { "codex:b": 2 } }"#).unwrap();
+        p.upgrade();
+        assert_eq!(p.size, 1.0);
     }
 
     #[test]

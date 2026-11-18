@@ -31,7 +31,7 @@ const ACTIVITY = {
 };
 
 // Saved preferences (prefs.rs); defaults until `prefs_get` answers.
-let prefs = { zone: "corners", activity: "normal", sleepAfter: 1800, chatter: true, sizes: {}, firstRunDone: true };
+let prefs = { zone: "corners", activity: "normal", sleepAfter: 1800, chatter: false, size: 1, firstRunDone: true };
 const pause = () => { const [a, b] = ACTIVITY[prefs.activity].pause; return a + Math.random() * (b - a); };
 
 const pet = {
@@ -317,7 +317,7 @@ function applyPrefs(next) {
   if (next.zone !== old.zone && !zoneOf(pet.x) && ["idle", "walk", "sleep"].includes(pet.state)) {
     pet.target = nearestHome(pet.x); setState("walk");
   }
-  const mul = next.sizes?.[petKey] ?? 1;
+  const mul = next.size ?? 1;
   if (mul !== sizeMul) {
     applySize(mul);
     pet.y = Math.min(pet.y, H);
@@ -373,7 +373,7 @@ async function usePet(key, remember = true) {
   if (seq !== loadSeq) return false; // superseded by a newer switch
   baseRenderer = next;
   petKey = key;
-  applySize(prefs.sizes?.[key] ?? 1);
+  applySize(prefs.size ?? 1);
   invoke("report_current_pet", { key }).catch((e) => console.warn("report pet", e));
   if (remember && prefs.pet !== key) invoke("prefs_set", { patch: { pet: key } }).catch((e) => console.warn("save pet", e));
   console.info("pet:", key, renderer.name, `S=${renderer.S} h=${Math.round(renderer.height)}`);

@@ -3,7 +3,7 @@
 //
 // Pet preferences live in Rust (prefs.rs): this page changes them with
 // `prefs_set` and redraws from `prefs` events, which also carry the pet on
-// screen (`current`) and its size. Switching pets goes through the overlay
+// screen (`current`). Switching pets goes through the overlay
 // (`pet-command`), which loads the pet first. App settings: settings.rs.
 
 const { invoke } = window.__TAURI__.core;
@@ -17,10 +17,10 @@ const setPrefs = (patch) => invoke("prefs_set", { patch }).catch((e) => toast(t(
 // Run a command; show its error instead of losing it.
 const act = (cmd, args, what) => invoke(cmd, args).catch((e) => toast(`${what}：${e}`, true));
 // Sizes are per pet: wait until the overlay says which pet is shown.
-const setSize = (v) => (ui.current ? setPrefs({ size: { pet: ui.current, value: Number(v) } }) : toast(t("宠物还没加载好，稍等一下", "The pet is still loading, one moment")));
+const setSize = (v) => setPrefs({ size: Number(v) });
 
 // Choices as [value, label]; functions so the labels follow the language.
-const SIZES = () => [["0.75", t("小", "S")], ["1", t("标准", "M")], ["1.3", t("大", "L")], ["1.6", t("特大", "XL")], ["2", t("超大", "XXL")]];
+const SIZES = () => [["0.5", t("超小", "XS")], ["0.75", t("小", "S")], ["1", t("标准", "M")], ["1.5", t("大", "L")], ["2", t("超大", "XL")]];
 const ACTIVITIES = () => [["quiet", t("安静", "Calm")], ["normal", t("正常", "Normal")], ["lively", t("活泼", "Lively")]];
 // prefs.rs SLEEP_CHOICES
 const SLEEPS = () => [["30", t("30 秒", "30 s")], ["1800", t("30 分钟", "30 min")], ["0", t("从不", "Never")]];
@@ -43,8 +43,8 @@ const CHIPS = () => [["idle", t("待机", "Idle")], ["running-right", t("走路"
 
 document.documentElement.classList.add(platform === "macos" ? "mac" : platform);
 
-// Last `prefs` view: saved prefs + `current` (pet on screen) + its `size`.
-let ui = { current: "", size: 1, custom: {}, zone: "corners", activity: "normal", sleepAfter: 1800, chatter: true, welcomeDismissed: true };
+// Last `prefs` view: saved prefs + `current` (pet on screen).
+let ui = { current: "", size: 1, custom: {}, zone: "corners", activity: "normal", sleepAfter: 1800, chatter: false, welcomeDismissed: true };
 let pets = [];          // [{ key, id, displayName, source, ... }]
 let selected = null;    // key shown in the detail panel
 let filter = "all";
@@ -326,11 +326,6 @@ async function renderDetail() {
     desc ? el("p", { className: "desc", textContent: desc }) : null,
     use,
   ];
-  if (current) {
-    const sizes = el("div", { className: "seg" });
-    segmented(sizes, SIZES(), String(ui.size), setSize);
-    children.push(el("div", { className: "sizes" }, el("span", { textContent: t("大小", "Size") }), sizes));
-  }
   children.push(linesBox, meta, more);
   box.replaceChildren(...children.filter(Boolean));
 }
