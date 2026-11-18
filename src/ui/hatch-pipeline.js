@@ -346,7 +346,7 @@ const HATCH = (() => {
 
   /**
    * Scale a row into 192×208 cells, put every frame on one ground line and
-   * its body (not its bounding box) on the cell's vertical centre line.
+   * every body (not bounding box) on one vertical line.
    * `scale` (cell px per sheet px) comes from layoutAll so every row shows
    * the character at the same size; without it the row sizes itself from
    * its body height (previews).
@@ -362,16 +362,21 @@ const HATCH = (() => {
     // Body size decides the scale; a jump that would leave the cell keeps the
     // body size and only gets its height compressed.
     let s = scale ?? TARGET_H / (bodyFraction(frames) * real[0].ch);
-    for (const f of real) s = Math.min(s, (CELL_W - 6) / f.w, (CELL_H - FOOT_PAD - 4) / f.h);
+    for (const f of real) s = Math.min(s, (CELL_H - FOOT_PAD - 4) / f.h);
+    // The whole row shares one body line, so what has to fit the cell width
+    // is the widest reach to either side of the body, not each frame alone.
+    const left = Math.max(...real.map((f) => f.bodyX));
+    const right = Math.max(...real.map((f) => f.w - f.bodyX));
+    s = Math.min(s, (CELL_W - 6) / (left + right));
+    // The cell centre when the row fits around it; a character drawn wide to
+    // one side (a side view's head) moves the line just enough to fit.
+    const line = Math.min(Math.max(CELL_W / 2, 3 + left * s), CELL_W - 3 - right * s);
     return frames.map((f) => {
       if (!f) return null;
       const dw = f.w * s, dh = f.h * s;
       const room = Math.max(0, CELL_H - FOOT_PAD - 4 - dh);
       const up = lift ? Math.min((ground.get(f.sheetRow) - f.bottom) * s, room) : 0;
-      // Body anchor on the cell centre, clamped so the frame stays inside
-      // (the scale above already makes every frame fit the cell width).
-      const dx = Math.min(Math.max(CELL_W / 2 - f.bodyX * s, 3), CELL_W - 3 - dw);
-      return { image: f.image, w: f.w, h: f.h, dx, dy: CELL_H - FOOT_PAD - up - dh, dw, dh };
+      return { image: f.image, w: f.w, h: f.h, dx: line - f.bodyX * s, dy: CELL_H - FOOT_PAD - up - dh, dw, dh };
     });
   }
 
