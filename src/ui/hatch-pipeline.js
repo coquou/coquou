@@ -109,7 +109,7 @@ const HATCH = (() => {
         + state.look.map((a, i) => `${i + 1}) ${DIR[a]}`).join("; ")
         + `. The second reference image shows the approved poses for up, right, down and left; reuse them and interpolate evenly between them. ${exaggerate} The feet stay planted at the same spot and scale.`;
     } else {
-      motion = `Animation "${state.id}" with ${state.frames} frames in time order: ${state.action}. Every frame is a distinct pose: legs, body and head clearly change from one frame to the next while flowing smoothly as a loop.`;
+      motion = `Animation "${state.id}" with ${state.frames} frames in time order: ${state.action}. Every frame is a distinct pose, flowing smoothly as a loop.`;
     }
     return [
       "Use the character in the reference image. Keep it identical: same design, colours, proportions, outfit and art style.",
