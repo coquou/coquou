@@ -80,6 +80,7 @@ src/
   assets/
     icons/               应用与托盘图标（source/ 是原图）
     presets/             预设宠物，随应用打包
+    installer.nsh        Windows 安装包钩子：安装前和卸载后清空 presets\，不留下旧版本的预设
   tools/                 开发脚本
     build-icons.py       从原图生成全部图标（icon-from-artwork.html 做图像处理）
     release.py           发版脚本，见 releasing.md

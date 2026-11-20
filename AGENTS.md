@@ -19,7 +19,7 @@ Coquou 是一个开源桌面宠物（macOS / Windows），基于 Tauri 2：Rust 
 
 ## 目录约定
 
-- 所有源码放在 `src/` 下：`core/`（Rust）、`ui/`（前端）、`assets/`（图标、预设宠物）、`tools/`（开发脚本）、`tests/`（测试工具）。
+- 所有源码放在 `src/` 下：`core/`（Rust）、`ui/`（前端）、`assets/`（图标、预设宠物、Windows 安装包钩子）、`tools/`（开发脚本）、`tests/`（测试工具）。
 - 文档全部放在 `doc/`（图片在 `doc/images/`）；只有 `README.md` 和 `AGENTS.md` 留在根目录。
 - 根目录只放清单和配置：`Cargo.toml`、`Cargo.lock`、`tauri.conf.json`、`LICENSE`、`.gitignore`；GitHub 工作流在 `.github/workflows/`，名字统一用 6 个字母（如 `Deploy`）。
 - 构建与发版产物：`target/`、`gen/`、`out/`，都不进仓库。

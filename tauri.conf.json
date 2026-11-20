@@ -78,7 +78,8 @@
           "English"
         ],
         "displayLanguageSelector": false,
-        "installMode": "currentUser"
+        "installMode": "currentUser",
+        "installerHooks": "src/assets/installer.nsh"
       }
     },
     "macOS": {
