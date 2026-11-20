@@ -207,6 +207,7 @@ fn main() {
             library::install_dropped,
             library::read_dropped,
             library::export_pet,
+            library::duplicate_pet,
             library::reveal_pet,
             library::delete_pet,
             pets::list_pets,

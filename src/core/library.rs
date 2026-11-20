@@ -1,5 +1,5 @@
 //! Pet library commands: install (drop, double-click, import, hatch), export,
-//! reveal, delete. Validation and the .pet format live in install.rs.
+//! copy, reveal, delete. Validation and the .pet format live in install.rs.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -213,6 +213,17 @@ pub fn export_pet(app: AppHandle, key: String) -> Result<String, String> {
     crate::windows::reveal(&path);
     log::info!("exported {key} → {}", path.display());
     Ok(path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+}
+
+/// Copy a pet as a new pet of the user's own (install.rs `duplicate`). The
+/// desktop keeps its pet, so this is announced as `pets-changed`, not
+/// `pet-installed`.
+#[tauri::command(async)]
+pub fn duplicate_pet(app: AppHandle, key: String) -> Result<Installed, String> {
+    let done = install::duplicate(&app, &key)?;
+    log::info!("copied {key} → {}", done.key);
+    let _ = app.emit("pets-changed", ());
+    Ok(done)
 }
 
 /// Show one pet's folder in Finder / Explorer (selected, never opened: a

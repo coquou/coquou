@@ -340,16 +340,26 @@ async function renderDetail() {
   add("ID", p.id);
 
   const more = el("div", { className: "more" });
-  const exp = el("button", { className: "btn ghost", type: "button", textContent: t("导出 .pet", "Export .pet") });
+  const exp = el("button", { className: "btn ghost", type: "button", textContent: t("导出", "Export"), title: t("存成 .pet 文件，放在「下载」里", "Save as a .pet file in Downloads") });
   exp.onclick = () => invoke("export_pet", { key: p.key })
     .then((f) => toast(t(`已导出到「下载」：${f}`, `Exported to Downloads: ${f}`)))
     .catch((e) => toast(t("导出失败：", "Export failed: ") + e, true));
+  // A copy in 我的 that can be renamed, changed in the hatch page or deleted.
+  const copy = el("button", { className: "btn ghost", type: "button", textContent: t("复制", "Copy"), title: t("复制一份到「我的」", "Make a copy under Mine") });
+  copy.onclick = () => invoke("duplicate_pet", { key: p.key })
+    .then((done) => {
+      // `pets-changed` may have redrawn the list before this answer arrived.
+      selected = done.key;
+      loadPets();
+      toast(t(`已复制为「${done.displayName}」`, `Copied as ${done.displayName}`));
+    })
+    .catch((e) => toast(t("复制失败：", "Could not copy: ") + e, true));
   const reveal = el("button", { className: "btn ghost", type: "button",
     textContent: platform === "macos" ? t("在访达中显示", "Show in Finder") : t("打开所在文件夹", "Show in Explorer") });
   reveal.onclick = () => invoke("reveal_pet", { key: p.key }).catch((e) => toast(String(e), true));
   const hide = el("button", { className: "btn ghost", type: "button", textContent: p.hidden ? t("取消隐藏", "Unhide") : t("隐藏", "Hide") });
   hide.onclick = () => toggleHidden(p);
-  more.append(exp, reveal, hide);
+  more.append(exp, copy, reveal, hide);
   if (p.hatched) {
     const edit = el("button", { className: "btn ghost", type: "button", textContent: t("在孵化页修改", "Change in Hatch") });
     edit.onclick = () => { showPage("hatch"); window.hatchEditPet?.(p.key); };

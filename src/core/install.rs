@@ -524,6 +524,81 @@ pub fn export<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, Stri
     result.map(|_| out)
 }
 
+/// Copy a pet into Coquou's pets folder as a new pet of the user's own (a
+/// preset or Codex pet becomes one they can change in the hatch page or
+/// delete): a free id, the name marked as a copy and no `preset` tag. Same
+/// limits and validation as installing. The user's name, lines and hidden
+/// flag for the original (prefs.rs) stay with the original.
+pub fn duplicate<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<Installed, String> {
+    let src = pets::pet_dir(app, key)?;
+    let old_id = validate(&src)?.id;
+    let root = pets::coquou_root(app).ok_or(tr!("找不到应用数据目录", "Cannot find the app data folder"))?;
+    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
+    let staging = root.join(format!("{STAGING_PREFIX}{}", nonce()));
+    let result = (|| {
+        copy_dir(&src, &staging, &mut Budget::default())?;
+        mark_copy(&staging, &copy_id(&root, &old_id), tr!(" 副本", " copy"))?;
+        let Checked { id, display_name, unused_states } = validate(&staging)?;
+        let dest = root.join(&id);
+        // Never replace a pet: the id was free a moment ago.
+        if dest.exists() {
+            return Err(tr!(format!("已经有 ID 为 {id} 的宠物了"), format!("A pet with the id {id} already exists")));
+        }
+        fs::rename(&staging, &dest).map_err(|e| e.to_string())?;
+        Ok(Installed { key: format!("coquou:{id}"), display_name, replaced: false, unused_states })
+    })();
+    if staging.exists() {
+        let _ = fs::remove_dir_all(&staging);
+    }
+    result
+}
+
+/// The first of `<id>-copy`, `<id>-copy-2`, … not taken in `root`; a copy of a
+/// copy counts on from the original's id instead of growing `-copy-copy`.
+fn copy_id(root: &Path, id: &str) -> String {
+    let base = match id.rsplit_once("-copy") {
+        Some((b, n)) if !b.is_empty() && (n.is_empty() || n.strip_prefix('-').is_some_and(|d| !d.is_empty() && d.bytes().all(|c| c.is_ascii_digit()))) => b,
+        _ => id,
+    };
+    // Room for "-copy-NNNN" within the 64-character id limit (ids are ASCII).
+    let base = &base[..base.len().min(52)];
+    (1..)
+        .map(|n| if n == 1 { format!("{base}-copy") } else { format!("{base}-copy-{n}") })
+        .find(|c| !root.join(c).exists())
+        .expect("an unbounded range always has a free id")
+}
+
+/// Give the pet in `dir` its new id and mark its names (pet.json and the
+/// extension's translations) as a copy; drop the `preset` tag.
+fn mark_copy(dir: &Path, id: &str, suffix: &str) -> Result<(), String> {
+    let edit = |file: &Path, change: &dyn Fn(&mut serde_json::Value)| -> Result<(), String> {
+        let text = read_json_text(file).ok_or_else(|| tr!(format!("读不了 {}", file.display()), format!("Cannot read {}", file.display())))??;
+        let mut value: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        change(&mut value);
+        fs::write(file, serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    };
+    edit(&dir.join("pet.json"), &|m| {
+        let name = m["displayName"].as_str().filter(|n| !n.trim().is_empty()).unwrap_or(m["id"].as_str().unwrap_or(id)).to_string();
+        m["id"] = id.into();
+        m["displayName"] = format!("{name}{suffix}").into();
+    })?;
+    if let Some(ext) = EXT_FILES.iter().map(|f| dir.join(f)).find(|f| f.is_file()) {
+        edit(&ext, &|e| {
+            if let Some(tags) = e["tags"].as_array_mut() {
+                tags.retain(|t| t != "preset");
+            }
+            if let Some(translations) = e["translations"].as_object_mut() {
+                for (lang, t) in translations {
+                    if let Some(name) = t["displayName"].as_str() {
+                        t["displayName"] = format!("{name}{}", if lang == "zh" { " 副本" } else { " copy" }).into();
+                    }
+                }
+            }
+        })?;
+    }
+    Ok(())
+}
+
 fn collect(root: &Path, dir: &Path, out: &mut Vec<PathBuf>, budget: &mut Budget) -> Result<(), String> {
     let mut entries: Vec<_> = fs::read_dir(dir).map_err(|e| e.to_string())?.flatten().collect();
     entries.sort_by_key(|e| e.file_name());
@@ -681,6 +756,33 @@ mod tests {
             let err = check(bad).unwrap_err();
             assert!(err.contains("hatch"), "{bad}: {err}");
         }
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn copies_get_a_free_id() {
+        let root = std::env::temp_dir().join(format!("coquou-test-{}", nonce()));
+        fs::create_dir_all(root.join("cat-copy")).unwrap();
+        assert_eq!(copy_id(&root, "cat"), "cat-copy-2");
+        assert_eq!(copy_id(&root, "cat-copy"), "cat-copy-2");
+        assert_eq!(copy_id(&root, "cat-copy-7"), "cat-copy-2");
+        assert_eq!(copy_id(&root, "dog"), "dog-copy");
+        assert_eq!(copy_id(&root, "my-copycat"), "my-copycat-copy");
+        assert_eq!(copy_id(&root, &"a".repeat(64)).len(), 57);
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_copy_is_marked_and_still_valid() {
+        let dir = preset_with_ext(r#"{ "tags": ["preset", "ai-hatched"], "translations": { "en": { "displayName": "Tuanzi" } } }"#);
+        mark_copy(&dir, "tuanzi-copy", " 副本").unwrap();
+        let checked = validate(&dir).unwrap();
+        assert_eq!(checked.id, "tuanzi-copy");
+        let manifest: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("pet.json")).unwrap()).unwrap();
+        assert_eq!(manifest["displayName"], "团子 副本");
+        let ext: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("coquou.json")).unwrap()).unwrap();
+        assert_eq!(ext["tags"], serde_json::json!(["ai-hatched"]));
+        assert_eq!(ext["translations"]["en"]["displayName"], "Tuanzi copy");
         fs::remove_dir_all(&dir).unwrap();
     }
 

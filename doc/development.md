@@ -59,8 +59,8 @@ src/
     settings.rs          应用设置（外观、语言等）与 settings.json 读写
     i18n.rs              界面语言：菜单和返回给界面的提示（tr! 宏）
     pets.rs              宠物发现（list_pets）与限定在宠物目录内的文件读取（read_pet_file）
-    install.rs           .pet / .zip / 目录的校验、安装、导出
-    library.rs           宠物库命令：安装、导入、拖放、导出、删除
+    install.rs           .pet / .zip / 目录的校验、安装、导出、复制
+    library.rs           宠物库命令：安装、导入、拖放、导出、复制、删除
     ai.rs                AI 接口配置、钥匙串、两种 OpenAI 协议
     hatch_run.rs         未完成孵化的存盘与恢复
     screens.rs           显示器选择与热插拔
