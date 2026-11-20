@@ -1,6 +1,7 @@
 //! Installing pets into Coquou's own pets directory from a `.pet` / `.zip`
 //! archive or a plain directory, copying a pet into it (`duplicate`), and
-//! exporting a pet as a `.pet`.
+//! exporting a pet as a `.pet`. An embedded preset is written out to a
+//! staging dir first, so all of this works on directories.
 //!
 //! Untrusted input, so every step is defensive:
 //!   - archive entries must stay inside the target (`enclosed_name`), symlinks
@@ -12,7 +13,7 @@
 //!     swapped into place; an older install of the same id is restored if the
 //!     swap fails. Leftovers from a crash are swept at start-up.
 
-use crate::pets;
+use crate::pets::{self, Pet};
 use serde::Serialize;
 use std::fs;
 use std::io::{self, Read};
@@ -458,10 +459,25 @@ fn swap_into_place(new: &Path, dest: &Path, root: &Path) -> Result<bool, String>
     Ok(true)
 }
 
-pub fn install<R: Runtime>(app: &AppHandle<R>, src: &Path) -> Result<Installed, String> {
+/// Coquou's pets folder (created) and a fresh staging path inside it, where
+/// `sweep` finds it again if Coquou dies before cleaning up.
+fn new_staging<R: Runtime>(app: &AppHandle<R>) -> Result<(PathBuf, PathBuf), String> {
     let root = pets::coquou_root(app).ok_or(tr!("找不到应用数据目录", "Cannot find the app data folder"))?;
     fs::create_dir_all(&root).map_err(|e| e.to_string())?;
     let staging = root.join(format!("{STAGING_PREFIX}{}", nonce()));
+    Ok((root, staging))
+}
+
+/// Put a copy of `pet`'s files at `dest`, under the same limits as installing.
+fn stage(pet: &Pet, dest: &Path) -> Result<(), String> {
+    match pet {
+        Pet::Dir(dir) => copy_dir(dir, dest, &mut Budget::default()),
+        Pet::Preset(p) => p.write_to(dest),
+    }
+}
+
+pub fn install<R: Runtime>(app: &AppHandle<R>, src: &Path) -> Result<Installed, String> {
+    let (root, staging) = new_staging(app)?;
 
     let result = (|| {
         if src.is_dir() {
@@ -489,14 +505,24 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, src: &Path) -> Result<Installed, 
     result
 }
 
-/// Pack a pet directory into `<Downloads>/<id>.pet` (zip, files at the root,
-/// same junk filter and size limits as installing). Returns the file path.
+/// Pack a pet into `<Downloads>/<id>.pet` (zip, files at the root, same junk
+/// filter and size limits as installing). Returns the file path.
 pub fn export<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, String> {
+    let pet = pets::locate(app, key)?;
+    if let Pet::Dir(dir) = &pet {
+        return export_dir(app, dir);
+    }
+    let (_, staging) = new_staging(app)?;
+    let result = stage(&pet, &staging).and_then(|()| export_dir(app, &staging));
+    let _ = fs::remove_dir_all(&staging);
+    result
+}
+
+fn export_dir<R: Runtime>(app: &AppHandle<R>, dir: &Path) -> Result<PathBuf, String> {
     use tauri::Manager;
     use zip::write::SimpleFileOptions;
 
-    let dir = pets::pet_dir(app, key)?;
-    let id = validate(&dir)?.id;
+    let id = validate(dir)?.id;
     let out_dir = app.path().download_dir().map_err(|e| e.to_string())?;
     let mut out = out_dir.join(format!("{id}.pet"));
     let mut n = 2;
@@ -506,7 +532,7 @@ pub fn export<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, Stri
     }
 
     let mut files = Vec::new();
-    collect(&dir, &dir, &mut files, &mut Budget::default())?;
+    collect(dir, dir, &mut files, &mut Budget::default())?;
     let tmp = out.with_extension("pet.part");
     let result = (|| {
         let mut zip = zip::ZipWriter::new(fs::File::create(&tmp).map_err(|e| e.to_string())?);
@@ -532,13 +558,11 @@ pub fn export<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, Stri
 /// written into the copy, so it starts out as the user sees the original.
 /// Same limits and validation as installing.
 pub fn duplicate<R: Runtime>(app: &AppHandle<R>, key: &str, own: &Own) -> Result<Installed, String> {
-    let src = pets::pet_dir(app, key)?;
-    let old_id = validate(&src)?.id;
-    let root = pets::coquou_root(app).ok_or(tr!("找不到应用数据目录", "Cannot find the app data folder"))?;
-    fs::create_dir_all(&root).map_err(|e| e.to_string())?;
-    let staging = root.join(format!("{STAGING_PREFIX}{}", nonce()));
+    let pet = pets::locate(app, key)?;
+    let (root, staging) = new_staging(app)?;
     let result = (|| {
-        copy_dir(&src, &staging, &mut Budget::default())?;
+        stage(&pet, &staging)?;
+        let old_id = validate(&staging)?.id;
         mark_copy(&staging, &copy_id(&root, &old_id), tr!(" 副本", " copy"), own)?;
         let Checked { id, display_name, unused_states } = validate(&staging)?;
         let dest = root.join(&id);
@@ -659,18 +683,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn bundled_presets_are_valid() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/assets/presets");
+    fn embedded_presets_are_valid() {
         let mut ids = Vec::new();
-        for entry in fs::read_dir(&root).expect("src/assets/presets missing") {
-            let dir = entry.unwrap().path();
-            if dir.is_dir() {
-                let id = validate(&dir).unwrap_or_else(|e| panic!("{}: {e}", dir.display())).id;
-                assert_eq!(dir.file_name().unwrap().to_str(), Some(id.as_str()));
-                ids.push(id);
-            }
+        for p in crate::presets::all() {
+            let dir = std::env::temp_dir().join(format!("coquou-preset-{}-{}", p.name, std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            p.write_to(&dir).unwrap();
+            let id = validate(&dir).unwrap_or_else(|e| panic!("{}: {e}", p.name)).id;
+            fs::remove_dir_all(&dir).unwrap();
+            assert_eq!(p.name, id);
+            ids.push(id);
         }
-        ids.sort();
         assert_eq!(ids, ["tuanzi"]);
     }
 

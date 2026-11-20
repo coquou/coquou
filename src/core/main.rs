@@ -28,6 +28,7 @@ mod migrate;
 mod overlay;
 mod pets;
 mod prefs;
+mod presets;
 mod screens;
 mod settings;
 mod sync;

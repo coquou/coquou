@@ -57,7 +57,7 @@ Coquou 是一个开源桌面宠物（macOS / Windows），基于 Tauri 2：Rust 
 
 - 宠物包只能包含数据和图片，不接受任何脚本。格式改动要同步更新 `doc/pet-format.md`，并保持与 Codex 宠物包兼容。
 - 预设宠物和图标以 CC BY 4.0 授权；不接受未经授权的他人角色或作品。
-- 预设宠物就是普通宠物包（`src/assets/presets/<id>/`），直接改其中的文件；换了图标原图，运行 `python3 src/tools/build-icons.py`。生成物要一起提交。
+- 预设宠物就是普通宠物包（`src/assets/presets/<id>/`，构建时编进程序），直接改其中的文件；换了图标原图，运行 `python3 src/tools/build-icons.py`。生成物要一起提交。
 
 ## 提交前检查
 

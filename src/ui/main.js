@@ -614,7 +614,7 @@ function defaultPets(pets, except) {
   return [...own, ...presets, ...hidden].map((p) => p.key);
 }
 // Try the defaults without overwriting the user's remembered choice. The
-// preset ships inside the app, so ending up with nothing means a damaged
+// preset is compiled into the app, so ending up with nothing means a damaged
 // install.
 async function useFallback(pets, except) {
   for (const key of defaultPets(pets, except)) if (await usePet(key, false)) return;

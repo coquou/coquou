@@ -354,12 +354,17 @@ async function renderDetail() {
       toast(t(`已复制为「${done.displayName}」`, `Copied as ${done.displayName}`));
     })
     .catch((e) => toast(t("复制失败：", "Could not copy: ") + e, true));
-  const reveal = el("button", { className: "btn ghost", type: "button",
-    textContent: platform === "macos" ? t("在访达中显示", "Show in Finder") : t("打开所在文件夹", "Show in Explorer") });
-  reveal.onclick = () => invoke("reveal_pet", { key: p.key }).catch((e) => toast(String(e), true));
+  more.append(copy, exp);
+  // A preset is compiled into the app and has no folder to show.
+  if (p.source !== "preset") {
+    const reveal = el("button", { className: "btn ghost", type: "button",
+      textContent: platform === "macos" ? t("在访达中显示", "Show in Finder") : t("打开所在文件夹", "Show in Explorer") });
+    reveal.onclick = () => invoke("reveal_pet", { key: p.key }).catch((e) => toast(String(e), true));
+    more.append(reveal);
+  }
   const hide = el("button", { className: "btn ghost", type: "button", textContent: p.hidden ? t("取消隐藏", "Unhide") : t("隐藏", "Hide") });
   hide.onclick = () => toggleHidden(p);
-  more.append(copy, exp, reveal, hide);
+  more.append(hide);
   if (p.hatched) {
     const edit = el("button", { className: "btn ghost", type: "button", textContent: t("在孵化页修改", "Change in Hatch") });
     edit.onclick = () => { showPage("hatch"); window.hatchEditPet?.(p.key); };

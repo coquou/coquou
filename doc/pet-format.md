@@ -230,7 +230,7 @@ PNG 或 WebP，透明背景。行定义：
 |---|---|---|
 | `coquou` | macOS `~/Library/Application Support/io.github.coquou/pets/`，Windows `%APPDATA%\io.github.coquou\pets\` | Coquou 自己的宠物 |
 | `codex` | `${CODEX_HOME:-~/.codex}/pets/` | 原地只读，不修改 Codex 目录 |
-| `preset` | 应用包内的 `presets/` | 随应用打包的预设宠物，只读 |
+| `preset` | 编在程序里，没有文件夹 | 预设宠物，只读 |
 
 ## 6. 安全约束
 

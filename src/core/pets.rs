@@ -1,15 +1,16 @@
 //! Pet discovery and sandboxed file access.
 //!
 //! A pet is a directory holding a Codex-compatible `pet.json` + spritesheet,
-//! optionally extended by `coquou.json` (see doc/pet-format.md). Pets are
-//! looked up in three roots:
+//! optionally extended by `coquou.json` (see doc/pet-format.md). Pets come
+//! from three sources:
 //!   - `coquou`: <app data>/pets            — pets installed into Coquou
 //!   - `codex`:  ${CODEX_HOME:-~/.codex}/pets — read in place, never modified
-//!   - `preset`: <resources>/presets          — shipped with the app, read-only
+//!   - `preset`: compiled into the app (presets.rs) — read-only, no directory
 //!
 //! The frontend addresses a pet by its key `"<source>:<dir name>"` and may only
-//! read files inside that pet's directory.
+//! read files inside that pet.
 
+use crate::presets::{self, Preset};
 use serde::Serialize;
 use std::path::{Component, Path, PathBuf};
 use tauri::{AppHandle, Manager, Runtime};
@@ -46,6 +47,7 @@ pub fn codex_root<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     roots(app).into_iter().find(|(s, _)| *s == "codex").map(|(_, p)| p)
 }
 
+/// The sources whose pets are directories on disk.
 fn roots<R: Runtime>(app: &AppHandle<R>) -> Vec<(&'static str, PathBuf)> {
     let mut roots = Vec::new();
     if let Some(dir) = coquou_root(app) {
@@ -56,9 +58,6 @@ fn roots<R: Runtime>(app: &AppHandle<R>) -> Vec<(&'static str, PathBuf)> {
         .or_else(|| app.path().home_dir().ok().map(|h| h.join(".codex")));
     if let Some(home) = codex_home {
         roots.push(("codex", home.join("pets")));
-    }
-    if let Ok(res) = app.path().resource_dir() {
-        roots.push(("preset", res.join("presets")));
     }
     roots
 }
@@ -82,6 +81,29 @@ fn read_small_json(path: &Path) -> Option<serde_json::Value> {
     serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()
 }
 
+/// A pet, wherever its files are.
+pub enum Pet {
+    Dir(PathBuf),
+    Preset(&'static Preset),
+}
+
+impl Pet {
+    /// pet.json or an extension file, parsed.
+    fn json(&self, name: &str) -> Option<serde_json::Value> {
+        match self {
+            Pet::Dir(dir) => read_small_json(&dir.join(name)),
+            Pet::Preset(p) => serde_json::from_slice(p.file(name)?).ok(),
+        }
+    }
+
+    fn has(&self, name: &str) -> bool {
+        match self {
+            Pet::Dir(dir) => dir.join(name).is_file(),
+            Pet::Preset(p) => p.file(name).is_some(),
+        }
+    }
+}
+
 /// A pet's own name in the interface language: the extension's
 /// `translations.<lang>.displayName`, else pet.json `displayName`, else its
 /// id (doc/pet-format.md).
@@ -95,35 +117,40 @@ pub fn own_name(manifest: &serde_json::Value, ext: Option<&serde_json::Value>, i
 
 fn list<R: Runtime>(app: &AppHandle<R>) -> Vec<PetEntry> {
     let custom = crate::settings::get(app).prefs.custom;
-    let mut pets = Vec::new();
+    let mut found = Vec::new();
     for (source, root) in roots(app) {
         let Ok(entries) = std::fs::read_dir(&root) else { continue };
         let mut dirs: Vec<_> = entries.flatten().filter(|e| e.path().is_dir()).collect();
         dirs.sort_by_key(|e| e.file_name());
         for entry in dirs {
             let name = entry.file_name().to_string_lossy().into_owned();
-            if !plain_name(&name) {
-                continue;
+            if plain_name(&name) {
+                found.push((source, name, Pet::Dir(entry.path())));
             }
-            let Some(manifest) = read_small_json(&entry.path().join("pet.json")) else { continue };
-            let id = manifest["id"].as_str().unwrap_or(&name).to_string();
-            let ext_file = crate::install::EXT_FILES.iter().copied().find(|f| entry.path().join(f).is_file());
-            let ext = ext_file.and_then(|f| read_small_json(&entry.path().join(f)));
-            let own_name = own_name(&manifest, ext.as_ref(), &id);
-            let hatched = is_hatched(ext.as_ref());
-            let key = format!("{source}:{name}");
-            let mine = custom.get(&key);
-            pets.push(PetEntry {
-                display_name: mine.and_then(|c| c.name.clone()).unwrap_or_else(|| own_name.clone()),
-                hidden: mine.is_some_and(|c| c.hidden),
-                key,
-                id,
-                own_name,
-                source,
-                ext_file,
-                hatched,
-            });
         }
+    }
+    found.extend(presets::all().iter().map(|p| ("preset", p.name.to_string(), Pet::Preset(p))));
+
+    let mut pets = Vec::new();
+    for (source, name, pet) in found {
+        let Some(manifest) = pet.json("pet.json") else { continue };
+        let id = manifest["id"].as_str().unwrap_or(&name).to_string();
+        let ext_file = crate::install::EXT_FILES.iter().copied().find(|f| pet.has(f));
+        let ext = ext_file.and_then(|f| pet.json(f));
+        let own_name = own_name(&manifest, ext.as_ref(), &id);
+        let hatched = is_hatched(ext.as_ref());
+        let key = format!("{source}:{name}");
+        let mine = custom.get(&key);
+        pets.push(PetEntry {
+            display_name: mine.and_then(|c| c.name.clone()).unwrap_or_else(|| own_name.clone()),
+            hidden: mine.is_some_and(|c| c.hidden),
+            key,
+            id,
+            own_name,
+            source,
+            ext_file,
+            hatched,
+        });
     }
     pets
 }
@@ -133,16 +160,27 @@ fn is_hatched(ext: Option<&serde_json::Value>) -> bool {
     ext.and_then(|e| e["tags"].as_array()).is_some_and(|tags| tags.iter().any(|t| t == "ai-hatched"))
 }
 
-/// Directory of the pet identified by `key` ("<source>:<dir name>"): a direct
-/// child of that source's root, and not a link.
-pub fn pet_dir<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, String> {
+/// The pet identified by `key` ("<source>:<dir name>"): an embedded preset,
+/// or a direct child of that source's root that is not a link.
+pub fn locate<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<Pet, String> {
     let (source, name) = key.split_once(':').ok_or("bad pet key")?;
+    if source == "preset" {
+        return presets::get(name).map(Pet::Preset).ok_or_else(|| format!("no preset {name}"));
+    }
     let root = roots(app)
         .into_iter()
         .find(|(s, _)| *s == source)
         .map(|(_, r)| r)
         .ok_or("unknown pet source")?;
-    child_dir(&root, name).map_err(|e| format!("bad pet key: {e}"))
+    child_dir(&root, name).map(Pet::Dir).map_err(|e| format!("bad pet key: {e}"))
+}
+
+/// Directory of the pet identified by `key`; presets have none.
+pub fn pet_dir<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, String> {
+    match locate(app, key)? {
+        Pet::Dir(dir) => Ok(dir),
+        Pet::Preset(_) => Err(tr!("预设宠物在应用里面，没有自己的文件夹", "Preset pets live inside the app and have no folder of their own").into()),
+    }
 }
 
 /// `root/name` for a plain `name`, if it is a real directory.
@@ -155,12 +193,6 @@ fn child_dir(root: &Path, name: &str) -> Result<PathBuf, String> {
         return Err("not a directory".into());
     }
     Ok(dir)
-}
-
-/// Resolve `path` inside the pet identified by `key`, refusing anything that
-/// could escape the pet's directory (absolute paths, `..`, links).
-fn resolve<R: Runtime>(app: &AppHandle<R>, key: &str, path: &str) -> Result<PathBuf, String> {
-    inside(&pet_dir(app, key)?, path)
 }
 
 /// `dir/path` where `path` is made of plain components, none of them a link.
@@ -198,13 +230,15 @@ pub fn list_pets(app: AppHandle) -> Vec<PetEntry> {
 }
 
 /// Raw bytes of a file inside a pet (arrives in JS as an ArrayBuffer). Runs
-/// off the main thread: sprite sheets are megabytes.
+/// off the main thread: sprite sheets are megabytes. A path in a directory
+/// may not escape it (`inside`).
 #[tauri::command(async)]
 pub fn read_pet_file(app: AppHandle, key: String, path: String) -> Result<tauri::ipc::Response, String> {
-    let file = resolve(&app, &key, &path)?;
-    std::fs::read(file)
-        .map(tauri::ipc::Response::new)
-        .map_err(|e| format!("{path}: {e}"))
+    let bytes = match locate(&app, &key)? {
+        Pet::Dir(dir) => std::fs::read(inside(&dir, &path)?).map_err(|e| format!("{path}: {e}"))?,
+        Pet::Preset(p) => p.file(&path).ok_or_else(|| format!("{path}: not found"))?.to_vec(),
+    };
+    Ok(tauri::ipc::Response::new(bytes))
 }
 
 #[cfg(test)]

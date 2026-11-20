@@ -59,6 +59,7 @@ src/
     settings.rs          应用设置（外观、语言等）与 settings.json 读写
     i18n.rs              界面语言：菜单和返回给界面的提示（tr! 宏）
     pets.rs              宠物发现（list_pets）与限定在宠物目录内的文件读取（read_pet_file）
+    presets.rs           编进程序的预设宠物（build.rs 生成的表）
     install.rs           .pet / .zip / 目录的校验、安装、导出、复制
     library.rs           宠物库命令：安装、导入、拖放、导出、复制、删除
     ai.rs                AI 接口配置、钥匙串、两种 OpenAI 协议
@@ -70,7 +71,7 @@ src/
     migrate.rs           从旧名 Perchy / Pipkin 迁移数据
     fsutil.rs            原子写入与容错的 JSON 读取
     sync.rs              共享状态加锁
-    build.rs             构建脚本；capabilities/ 是窗口权限
+    build.rs             构建脚本：把 assets/presets/ 编进程序；capabilities/ 是窗口权限
   ui/                    前端（纯静态文件）
     common.js            两个窗口共用：日志、界面语言（t / data-en）、平台、Codex 图集常量与读取宠物
     index.html / main.js 桌宠窗口：状态机、物理、命中检测、台词气泡、通用反应（拎起摇摆、落地压扁）
@@ -79,8 +80,8 @@ src/
     hatch.js / hatch-pipeline.js  主窗口的孵化页与图像流水线
   assets/
     icons/               应用与托盘图标（source/ 是原图）
-    presets/             预设宠物，随应用打包
-    installer.nsh        Windows 安装包钩子：安装前和卸载后清空 presets\，不留下旧版本的预设
+    presets/             预设宠物，构建时编进程序
+    installer.nsh        Windows 安装包钩子：删掉 0.0.3 及以前留在安装目录里的 presets\
   tools/                 开发脚本
     build-icons.py       从原图生成全部图标（icon-from-artwork.html 做图像处理）
     release.py           发版脚本，见 releasing.md
@@ -126,7 +127,7 @@ target/ / gen/           编译输出（不进仓库）
 
 ## 预设宠物
 
-团子（`tuanzi`）是用 AI 孵化（OpenRouter + gpt-image-2）做出来、再加上台词的普通宠物包，放在 `src/assets/presets/tuanzi/`，随应用打包；只读，不能删除或覆盖，但和其他宠物一样能改名、改台词、隐藏。要改它就直接改目录里的文件。所有宠物（预设、安装的、Codex 的）走同一个渲染器；预设随应用打包，所以一定有宠物可显示。它以前叫团团（`tuantuan`），旧设置里选的宠物和改过的名字、台词会在 `Prefs::upgrade` 里转到团子。
+团子（`tuanzi`）是用 AI 孵化（OpenRouter + gpt-image-2）做出来、再加上台词的普通宠物包，放在 `src/assets/presets/tuanzi/`，构建时由 `build.rs` 编进程序（`presets.rs`），磁盘上没有它的文件夹，所以怎么安装、更新都不会多出或少掉预设；只读，不能删除或覆盖，也没有「在访达中显示」，但和其他宠物一样能改名、改台词、隐藏、复制、导出。要改它就直接改目录里的文件，重新构建即可。所有宠物（预设、安装的、Codex 的）走同一个渲染器；预设编在程序里，所以一定有宠物可显示。它以前叫团团（`tuantuan`），旧设置里选的宠物和改过的名字、台词会在 `Prefs::upgrade` 里转到团子。
 
 ## 图标
 

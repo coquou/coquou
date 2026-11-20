@@ -33,9 +33,6 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": {
-      "src/assets/presets/": "presets/"
-    },
     "icon": [
       "src/assets/icons/32x32.png",
       "src/assets/icons/128x128.png",
