@@ -359,7 +359,7 @@ async function renderDetail() {
   reveal.onclick = () => invoke("reveal_pet", { key: p.key }).catch((e) => toast(String(e), true));
   const hide = el("button", { className: "btn ghost", type: "button", textContent: p.hidden ? t("取消隐藏", "Unhide") : t("隐藏", "Hide") });
   hide.onclick = () => toggleHidden(p);
-  more.append(exp, copy, reveal, hide);
+  more.append(copy, exp, reveal, hide);
   if (p.hatched) {
     const edit = el("button", { className: "btn ghost", type: "button", textContent: t("在孵化页修改", "Change in Hatch") });
     edit.onclick = () => { showPage("hatch"); window.hatchEditPet?.(p.key); };
