@@ -44,6 +44,10 @@ pub struct Settings {
     /// Check GitHub for new versions in the background (update.rs).
     #[serde(default = "yes")]
     pub auto_update: bool,
+    /// The pets page offers a 已隐藏 tab to find hidden pets again; off, they
+    /// stay out of sight.
+    #[serde(default)]
+    pub show_hidden: bool,
     /// Pet preferences (prefs.rs).
     #[serde(default)]
     pub prefs: crate::prefs::Prefs,
@@ -58,6 +62,7 @@ impl Default for Settings {
             hide_fullscreen: true,
             battery_saver: true,
             auto_update: true,
+            show_hidden: false,
             prefs: crate::prefs::Prefs::default(),
         }
     }
@@ -171,7 +176,7 @@ pub fn get_settings(app: AppHandle) -> SettingsView {
     }
 }
 
-/// `name` is one of: hideFullscreen, batterySaver, autoUpdate, autostart (bool),
+/// `name` is one of: hideFullscreen, batterySaver, autoUpdate, showHidden, autostart (bool),
 /// display (string key), theme (system | light | dark) or language
 /// (system | zh | en).
 #[tauri::command]
@@ -189,6 +194,10 @@ pub fn set_setting(app: AppHandle, name: String, value: serde_json::Value) -> Re
         "autoUpdate" => {
             let on = value.as_bool().ok_or("expected a boolean")?;
             update(&app, |s| s.auto_update = on)?;
+        }
+        "showHidden" => {
+            let on = value.as_bool().ok_or("expected a boolean")?;
+            update(&app, |s| s.show_hidden = on)?;
         }
         "autostart" => {
             let on = value.as_bool().ok_or("expected a boolean")?;
