@@ -112,14 +112,44 @@ function loadArt(key) {
     const entry = pets.find((p) => p.key === key);
     if (!entry) return Promise.reject(new Error(`unknown pet ${key}`));
     const load = window.Coquou.loadAtlas(entry)
-      .then((a) => ({ img: a.hd ?? a.atlas, k: a.hd ? a.hk : 1, rows: a.rows, ext: a.ext, manifest: a.manifest }));
+      .then((a) => ({ img: a.hd ?? a.atlas, k: a.hd ? a.hk : 1, rows: a.rows, ext: a.ext, manifest: a.manifest, span: span(a.atlas, a.rows) }));
     art.set(key, load.then((a) => { ready.set(key, a); return a; }, (e) => { art.delete(key); throw e; }));
   }
   return art.get(key);
 }
 
-// Draw one frame of `anim` at time t (seconds) into canvas g (w×h).
-function paint(g, a, anim, t, w, h, crop = true) {
+// Where the pet is drawn in its cells: the width of its widest row and the
+// middle of each row's drawn pixels, so a preview can frame the whole pet
+// (a tail reaching the cell's edge included) instead of the cell's middle.
+function span(atlas, rows) {
+  const [cw, ch] = CELL;
+  const c = el("canvas", { width: atlas.width, height: atlas.height });
+  const g = c.getContext("2d", { willReadFrequently: true });
+  g.drawImage(atlas, 0, 0);
+  const px = g.getImageData(0, 0, c.width, c.height).data;
+  let width = 0;
+  const center = [];
+  for (let r = 0; r < rows; r++) {
+    let lo = cw, hi = -1;
+    for (let y = r * ch; y < (r + 1) * ch; y++) {
+      for (let x = 0; x < c.width; x++) {
+        if (px[(y * c.width + x) * 4 + 3] < 24) continue;
+        const cx = x % cw;
+        if (cx < lo) lo = cx;
+        if (cx > hi) hi = cx;
+      }
+    }
+    center.push(hi < 0 ? cw / 2 : (lo + hi + 1) / 2);
+    if (hi >= 0) width = Math.max(width, hi + 1 - lo);
+  }
+  // A little room around the widest row; never zoomed in past the old 160 px crop.
+  return { width: Math.min(cw, Math.max(160, width + 8)), center };
+}
+
+// Draw one frame of `anim` at time t (seconds) into canvas g (w×h): a window
+// the canvas's shape, as wide as the pet's widest row (`span`), centred on
+// this row's pixels and standing on the cell's bottom.
+function paint(g, a, anim, t, w, h) {
   g.clearRect(0, 0, w, h);
   if (!a) return;
   const [row, durs] = ROWS[anim] || ROWS.idle;
@@ -128,10 +158,14 @@ function paint(g, a, anim, t, w, h, crop = true) {
   while (f < durs.length - 1 && ms >= durs[f]) { ms -= durs[f]; f++; }
   const k = a.k;
   const [cw, ch] = CELL;
-  // The body sits in the lower middle of a cell; crop the margins.
-  const [sx, sy, sw, sh] = crop ? [16, 26, 160, 176] : [0, 0, cw, ch];
+  let sw = a.span.width, sh = (sw * h) / w;
+  if (sh > ch) { sh = ch; sw = (ch * w) / h; }
+  const sx = a.span.center[row] - sw / 2, sy = ch - sh;
+  // The part of the window past the cell's sides stays empty rather than
+  // showing the neighbouring frame.
+  const x0 = Math.max(0, sx), x1 = Math.min(cw, sx + sw), scale = w / sw;
   g.imageSmoothingQuality = "high";
-  g.drawImage(a.img, (f * cw + sx) * k, (row * ch + sy) * k, sw * k, sh * k, 0, 0, w, h);
+  g.drawImage(a.img, (f * cw + x0) * k, (row * ch + sy) * k, (x1 - x0) * k, sh * k, (x0 - sx) * scale, 0, (x1 - x0) * scale, h);
 }
 
 // ---------- library ----------
@@ -196,7 +230,7 @@ function renderGrid() {
   const list = visible();
   cardCanvases.clear();
   const cards = list.map((p) => {
-    const c = el("canvas", { width: 256, height: 282 });
+    const c = el("canvas", { width: 256, height: 277 });
     cardCanvases.set(p.key, c);
     const card = el("div", { className: "pet", tabIndex: 0 },
       c,
