@@ -57,7 +57,8 @@ pub struct Custom {
     /// Replaces the pet's own lines, occasion by occasion.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lines: Option<Lines>,
-    /// Left out of the tray menu and of automatic pet choices.
+    /// Left out of automatic pet choices and of the pets page (unless the
+    /// 显示隐藏宠物 setting shows its 隐藏 tab).
     pub hidden: bool,
 }
 

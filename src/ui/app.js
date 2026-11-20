@@ -344,7 +344,7 @@ async function renderDetail() {
   exp.onclick = () => invoke("export_pet", { key: p.key })
     .then((f) => toast(t(`已导出到「下载」：${f}`, `Exported to Downloads: ${f}`)))
     .catch((e) => toast(t("导出失败：", "Export failed: ") + e, true));
-  // A copy in 我的 that can be renamed, changed in the hatch page or deleted.
+  // A copy in 我的, the user's own pet: unlike a preset or Codex pet it can be deleted.
   const copy = el("button", { className: "btn ghost", type: "button", textContent: t("复制", "Copy"), title: t("复制一份到「我的」", "Make a copy under Mine") });
   copy.onclick = () => invoke("duplicate_pet", { key: p.key })
     .then((done) => {

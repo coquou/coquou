@@ -1,5 +1,6 @@
 //! Installing pets into Coquou's own pets directory from a `.pet` / `.zip`
-//! archive or a plain directory.
+//! archive or a plain directory, copying a pet into it (`duplicate`), and
+//! exporting a pet as a `.pet`.
 //!
 //! Untrusted input, so every step is defensive:
 //!   - archive entries must stay inside the target (`enclosed_name`), symlinks
@@ -525,8 +526,8 @@ pub fn export<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, Stri
 }
 
 /// Copy a pet into Coquou's pets folder as a new pet of the user's own (a
-/// preset or Codex pet becomes one they can change in the hatch page or
-/// delete): a free id, the name marked as a copy and no `preset` tag. The
+/// read-only preset or Codex pet becomes one they can delete or replace):
+/// a free id, the name marked as a copy and no `preset` tag. The
 /// user's own touches to the original (prefs.rs: `own` name and lines) are
 /// written into the copy, so it starts out as the user sees the original.
 /// Same limits and validation as installing.

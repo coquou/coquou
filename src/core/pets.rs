@@ -23,8 +23,8 @@ pub struct PetEntry {
     pub display_name: String,
     /// The pet's own name (`own_name`), in the interface language when it has one.
     pub own_name: String,
-    /// Hidden by the user: left out of automatic pet choices and, in the app
-    /// window, of the default list.
+    /// Hidden by the user: left out of automatic pet choices and of the pets
+    /// page, unless the 显示隐藏宠物 setting shows its 隐藏 tab.
     pub hidden: bool,
     pub source: &'static str,
     /// The extension file the pet has (`coquou.json`, or the legacy
