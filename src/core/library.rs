@@ -215,12 +215,14 @@ pub fn export_pet(app: AppHandle, key: String) -> Result<String, String> {
     Ok(path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
 }
 
-/// Copy a pet as a new pet of the user's own (install.rs `duplicate`). The
-/// desktop keeps its pet, so this is announced as `pets-changed`, not
-/// `pet-installed`.
+/// Copy a pet as a new pet of the user's own (install.rs `duplicate`), with
+/// the name and lines the user gave the original. The desktop keeps its pet,
+/// so this is announced as `pets-changed`, not `pet-installed`.
 #[tauri::command(async)]
 pub fn duplicate_pet(app: AppHandle, key: String) -> Result<Installed, String> {
-    let done = install::duplicate(&app, &key)?;
+    let custom = crate::settings::get(&app).prefs.custom.remove(&key).unwrap_or_default();
+    let own = install::Own { name: custom.name.as_deref(), lines: custom.lines.as_ref() };
+    let done = install::duplicate(&app, &key, &own)?;
     log::info!("copied {key} → {}", done.key);
     let _ = app.emit("pets-changed", ());
     Ok(done)

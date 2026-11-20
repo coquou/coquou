@@ -526,10 +526,11 @@ pub fn export<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<PathBuf, Stri
 
 /// Copy a pet into Coquou's pets folder as a new pet of the user's own (a
 /// preset or Codex pet becomes one they can change in the hatch page or
-/// delete): a free id, the name marked as a copy and no `preset` tag. Same
-/// limits and validation as installing. The user's name, lines and hidden
-/// flag for the original (prefs.rs) stay with the original.
-pub fn duplicate<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<Installed, String> {
+/// delete): a free id, the name marked as a copy and no `preset` tag. The
+/// user's own touches to the original (prefs.rs: `own` name and lines) are
+/// written into the copy, so it starts out as the user sees the original.
+/// Same limits and validation as installing.
+pub fn duplicate<R: Runtime>(app: &AppHandle<R>, key: &str, own: &Own) -> Result<Installed, String> {
     let src = pets::pet_dir(app, key)?;
     let old_id = validate(&src)?.id;
     let root = pets::coquou_root(app).ok_or(tr!("找不到应用数据目录", "Cannot find the app data folder"))?;
@@ -537,7 +538,7 @@ pub fn duplicate<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<Installed,
     let staging = root.join(format!("{STAGING_PREFIX}{}", nonce()));
     let result = (|| {
         copy_dir(&src, &staging, &mut Budget::default())?;
-        mark_copy(&staging, &copy_id(&root, &old_id), tr!(" 副本", " copy"))?;
+        mark_copy(&staging, &copy_id(&root, &old_id), tr!(" 副本", " copy"), own)?;
         let Checked { id, display_name, unused_states } = validate(&staging)?;
         let dest = root.join(&id);
         // Never replace a pet: the id was free a moment ago.
@@ -551,6 +552,13 @@ pub fn duplicate<R: Runtime>(app: &AppHandle<R>, key: &str) -> Result<Installed,
         let _ = fs::remove_dir_all(&staging);
     }
     result
+}
+
+/// The user's name and lines for a pet (prefs.rs `Custom`), carried into a copy.
+#[derive(Default)]
+pub struct Own<'a> {
+    pub name: Option<&'a str>,
+    pub lines: Option<&'a Lines>,
 }
 
 /// The first of `<id>-copy`, `<id>-copy-2`, … not taken in `root`; a copy of a
@@ -568,35 +576,61 @@ fn copy_id(root: &Path, id: &str) -> String {
         .expect("an unbounded range always has a free id")
 }
 
-/// Give the pet in `dir` its new id and mark its names (pet.json and the
-/// extension's translations) as a copy; drop the `preset` tag.
-fn mark_copy(dir: &Path, id: &str, suffix: &str) -> Result<(), String> {
-    let edit = |file: &Path, change: &dyn Fn(&mut serde_json::Value)| -> Result<(), String> {
+/// Give the pet in `dir` its new id and mark its name as a copy; drop the
+/// `preset` tag. The user's own name and lines replace the pet's, in every
+/// language: the user's touches apply whatever the interface language, so
+/// the translations they override are removed rather than left to win.
+fn mark_copy(dir: &Path, id: &str, suffix: &str, own: &Own) -> Result<(), String> {
+    let read = |file: &Path| -> Result<serde_json::Value, String> {
         let text = read_json_text(file).ok_or_else(|| tr!(format!("读不了 {}", file.display()), format!("Cannot read {}", file.display())))??;
-        let mut value: serde_json::Value = serde_json::from_str(&text).map_err(|e| e.to_string())?;
-        change(&mut value);
-        fs::write(file, serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+        serde_json::from_str(&text).map_err(|e| e.to_string())
     };
-    edit(&dir.join("pet.json"), &|m| {
-        let name = m["displayName"].as_str().filter(|n| !n.trim().is_empty()).unwrap_or(m["id"].as_str().unwrap_or(id)).to_string();
-        m["id"] = id.into();
-        m["displayName"] = format!("{name}{suffix}").into();
-    })?;
-    if let Some(ext) = EXT_FILES.iter().map(|f| dir.join(f)).find(|f| f.is_file()) {
-        edit(&ext, &|e| {
-            if let Some(tags) = e["tags"].as_array_mut() {
-                tags.retain(|t| t != "preset");
-            }
-            if let Some(translations) = e["translations"].as_object_mut() {
-                for (lang, t) in translations {
-                    if let Some(name) = t["displayName"].as_str() {
-                        t["displayName"] = format!("{name}{}", if lang == "zh" { " 副本" } else { " copy" }).into();
-                    }
-                }
-            }
-        })?;
+    let write = |file: &Path, value: &serde_json::Value| {
+        fs::write(file, serde_json::to_string_pretty(value).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
+    };
+
+    let manifest_file = dir.join("pet.json");
+    let mut m = read(&manifest_file)?;
+    let name = own.name.map(str::to_string).unwrap_or_else(|| {
+        m["displayName"].as_str().filter(|n| !n.trim().is_empty()).unwrap_or(m["id"].as_str().unwrap_or(id)).to_string()
+    });
+    m["id"] = id.into();
+    m["displayName"] = format!("{name}{suffix}").into();
+    write(&manifest_file, &m)?;
+
+    let ext_file = EXT_FILES.iter().map(|f| dir.join(f)).find(|f| f.is_file());
+    let lines = own.lines.filter(|l| !l.is_empty());
+    if ext_file.is_none() && lines.is_none() {
+        return Ok(());
     }
-    Ok(())
+    let ext_file = ext_file.unwrap_or_else(|| dir.join(EXT_FILES[0]));
+    let mut e = if ext_file.is_file() { read(&ext_file)? } else { serde_json::json!({ "format": "coquou/1" }) };
+    if let Some(tags) = e.get_mut("tags").and_then(|t| t.as_array_mut()) {
+        tags.retain(|t| t != "preset");
+    }
+    if let Some(translations) = e.get_mut("translations").and_then(|t| t.as_object_mut()) {
+        for (lang, t) in translations.iter_mut() {
+            let Some(t) = t.as_object_mut() else { continue };
+            if own.name.is_some() {
+                t.remove("displayName");
+            } else if let Some(n) = t.get("displayName").and_then(|n| n.as_str()) {
+                let marked = format!("{n}{}", if lang == "zh" { " 副本" } else { " copy" });
+                t.insert("displayName".into(), marked.into());
+            }
+            if let (Some(lines), Some(their)) = (lines, t.get_mut("lines").and_then(|l| l.as_object_mut())) {
+                their.retain(|kind, _| !lines.contains_key(kind));
+            }
+        }
+    }
+    if let Some(lines) = lines {
+        if !e["lines"].is_object() {
+            e["lines"] = serde_json::json!({});
+        }
+        for (kind, list) in lines {
+            e["lines"][kind] = serde_json::json!(list);
+        }
+    }
+    write(&ext_file, &e)
 }
 
 fn collect(root: &Path, dir: &Path, out: &mut Vec<PathBuf>, budget: &mut Budget) -> Result<(), String> {
@@ -775,7 +809,7 @@ mod tests {
     #[test]
     fn a_copy_is_marked_and_still_valid() {
         let dir = preset_with_ext(r#"{ "tags": ["preset", "ai-hatched"], "translations": { "en": { "displayName": "Tuanzi" } } }"#);
-        mark_copy(&dir, "tuanzi-copy", " 副本").unwrap();
+        mark_copy(&dir, "tuanzi-copy", " 副本", &Own::default()).unwrap();
         let checked = validate(&dir).unwrap();
         assert_eq!(checked.id, "tuanzi-copy");
         let manifest: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("pet.json")).unwrap()).unwrap();
@@ -783,6 +817,34 @@ mod tests {
         let ext: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("coquou.json")).unwrap()).unwrap();
         assert_eq!(ext["tags"], serde_json::json!(["ai-hatched"]));
         assert_eq!(ext["translations"]["en"]["displayName"], "Tuanzi copy");
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_copy_takes_the_users_name_and_lines() {
+        let ext = r#"{ "lines": { "click": ["喵！"], "pet": ["呼噜"] },
+            "translations": { "en": { "displayName": "Tuanzi", "lines": { "click": ["Meow!"], "pet": ["Purr"] } } } }"#;
+        let dir = preset_with_ext(ext);
+        let lines: Lines = [("click".to_string(), vec!["嗨".to_string()])].into();
+        mark_copy(&dir, "tuanzi-copy", " 副本", &Own { name: Some("小橘"), lines: Some(&lines) }).unwrap();
+        validate(&dir).unwrap();
+        let manifest: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("pet.json")).unwrap()).unwrap();
+        assert_eq!(manifest["displayName"], "小橘 副本");
+        let ext: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("coquou.json")).unwrap()).unwrap();
+        assert_eq!(ext["lines"]["click"], serde_json::json!(["嗨"]));
+        assert_eq!(ext["lines"]["pet"], serde_json::json!(["呼噜"]));
+        // The user's name and lines win in English too.
+        assert!(ext["translations"]["en"].get("displayName").is_none());
+        assert_eq!(ext["translations"]["en"]["lines"], serde_json::json!({ "pet": ["Purr"] }));
+        fs::remove_dir_all(&dir).unwrap();
+
+        // A pet without coquou.json gets one for the lines.
+        let dir = preset_with_ext("{}");
+        fs::remove_file(dir.join("coquou.json")).unwrap();
+        mark_copy(&dir, "x-copy", " copy", &Own { name: None, lines: Some(&lines) }).unwrap();
+        validate(&dir).unwrap();
+        let ext: serde_json::Value = serde_json::from_str(&fs::read_to_string(dir.join("coquou.json")).unwrap()).unwrap();
+        assert_eq!(ext["lines"]["click"], serde_json::json!(["嗨"]));
         fs::remove_dir_all(&dir).unwrap();
     }
 
