@@ -82,7 +82,7 @@
   "translations": {
     "en": {
       "displayName": "Tuanzi",
-      "description": "A round little orange cat with three small stripes on the forehead.",
+      "description": "A round little orange cat",
       "lines": {
         "hello": [
           "Tuanzi is here!",
