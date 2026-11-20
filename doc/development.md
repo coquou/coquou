@@ -39,7 +39,7 @@ Windows 上，从打包成 MSIX 的应用里启动的 Coquou（比如在 Claude 
 | 参数 | 作用 |
 |---|---|
 | `--window` | 启动时打开主窗口 |
-| `--pet <key>` | 用指定宠物启动并记住，例如 `--pet preset:tuantuan` |
+| `--pet <key>` | 用指定宠物启动并记住，例如 `--pet preset:tuanzi` |
 | `<文件>` | 安装 `.pet` / `.zip` / 宠物目录 |
 | `--hatch-selftest <地址> <images\|chat> [transparent] [persist] [keep]` | 孵化离线自测，见下 |
 
@@ -125,7 +125,7 @@ target/ / gen/           编译输出（不进仓库）
 
 ## 预设宠物
 
-团团（`tuantuan`）是用 AI 孵化（OpenRouter + gpt-image-2，参考图是早期程序绘制的团团）做出来、再加上台词的普通宠物包，放在 `src/assets/presets/tuantuan/`，随应用打包；只读，不能删除或覆盖，但和其他宠物一样能改名、改台词、隐藏。要改它就直接改目录里的文件。所有宠物（预设、安装的、Codex 的）走同一个渲染器；预设随应用打包，所以一定有宠物可显示。
+团子（`tuanzi`）是用 AI 孵化（OpenRouter + gpt-image-2）做出来、再加上台词的普通宠物包，放在 `src/assets/presets/tuanzi/`，随应用打包；只读，不能删除或覆盖，但和其他宠物一样能改名、改台词、隐藏。要改它就直接改目录里的文件。所有宠物（预设、安装的、Codex 的）走同一个渲染器；预设随应用打包，所以一定有宠物可显示。它以前叫团团（`tuantuan`），旧设置里选的宠物和改过的名字、台词会在 `Prefs::upgrade` 里转到团子。
 
 ## 图标
 

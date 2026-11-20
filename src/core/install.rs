@@ -561,7 +561,7 @@ mod tests {
             }
         }
         ids.sort();
-        assert_eq!(ids, ["tuantuan"]);
+        assert_eq!(ids, ["tuanzi"]);
     }
 
     #[test]
@@ -618,7 +618,7 @@ mod tests {
     /// The preset's pet.json and atlas with the given coquou.json, in a temp dir.
     fn preset_with_ext(ext: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("coquou-test-{}", nonce()));
-        let preset = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/assets/presets/tuantuan");
+        let preset = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/assets/presets/tuanzi");
         fs::create_dir_all(&dir).unwrap();
         for f in ["pet.json", "spritesheet.png"] {
             fs::copy(preset.join(f), dir.join(f)).unwrap();

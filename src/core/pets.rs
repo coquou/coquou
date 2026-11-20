@@ -270,19 +270,19 @@ mod tests {
 
     #[test]
     fn own_name_prefers_the_translation() {
-        let manifest = json!({ "displayName": "团团" });
+        let manifest = json!({ "displayName": "团子" });
         crate::i18n::apply(crate::i18n::Language::En);
-        let ext = json!({ "translations": { "en": { "displayName": "Tuantuan" } } });
-        assert_eq!(own_name(&manifest, Some(&ext), "tuantuan"), "Tuantuan");
-        assert_eq!(own_name(&manifest, Some(&json!({})), "tuantuan"), "团团");
-        assert_eq!(own_name(&json!({}), None, "tuantuan"), "tuantuan");
+        let ext = json!({ "translations": { "en": { "displayName": "Tuanzi" } } });
+        assert_eq!(own_name(&manifest, Some(&ext), "tuanzi"), "Tuanzi");
+        assert_eq!(own_name(&manifest, Some(&json!({})), "tuanzi"), "团子");
+        assert_eq!(own_name(&json!({}), None, "tuanzi"), "tuanzi");
         crate::i18n::apply(crate::i18n::Language::Zh);
-        assert_eq!(own_name(&manifest, Some(&ext), "tuantuan"), "团团");
+        assert_eq!(own_name(&manifest, Some(&ext), "tuanzi"), "团子");
     }
 
     #[test]
     fn pet_names_are_single_plain_segments() {
-        assert!(plain_name("tuantuan"));
+        assert!(plain_name("tuanzi"));
         assert!(plain_name("橘子-2"));
         for bad in ["", ".hidden", "..", "a/b", "a\\b", "C:", "C:foo", "x:y"] {
             assert!(!plain_name(bad), "{bad}");

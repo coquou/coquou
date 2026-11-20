@@ -64,7 +64,7 @@ pub struct Custom {
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Prefs {
-    /// The pet the user picked (pet key, e.g. "preset:tuantuan").
+    /// The pet the user picked (pet key, e.g. "preset:tuanzi").
     pub pet: Option<String>,
     /// Display size multiplier, one of `SIZES`, shared by every pet.
     pub size: f64,
@@ -215,17 +215,23 @@ impl Patch {
 
 impl Prefs {
     /// Settings saved by older versions: the built-in cat became the preset
-    /// 团团, the size per pet became one shared size (the chosen pet's), and
-    /// the doze-off delays changed to 30 s / 30 min / never.
+    /// 团团, which was later re-hatched as 团子 (choice and customisation
+    /// follow it), the size per pet became one shared size (the chosen
+    /// pet's), and the doze-off delays changed to 30 s / 30 min / never.
     pub fn upgrade(&mut self) {
-        const OLD: &str = "builtin";
-        const NEW: &str = "preset:tuantuan";
+        const OLD: [&str; 2] = ["builtin", "preset:tuantuan"];
+        const NEW: &str = "preset:tuanzi";
         if let Some(size) = self.pet.as_deref().and_then(|k| self.old_sizes.get(k)) {
             self.size = *size;
         }
         self.old_sizes.clear();
-        if self.pet.as_deref() == Some(OLD) {
+        if self.pet.as_deref().is_some_and(|k| OLD.contains(&k)) {
             self.pet = Some(NEW.into());
+        }
+        for old in OLD {
+            if let Some(custom) = self.custom.remove(old) {
+                self.custom.entry(NEW.into()).or_insert(custom);
+            }
         }
         if !SIZES.iter().any(|v| (v - self.size).abs() < 1e-6) {
             let s = self.size;
@@ -343,15 +349,15 @@ mod tests {
     #[test]
     fn custom_name_lines_hidden() {
         let mut p = Prefs::default();
-        patch(r#"{ "custom": { "pet": "preset:tuantuan", "name": "  小橘 ", "lines": { "click": ["嗨", " "] } } }"#)
+        patch(r#"{ "custom": { "pet": "preset:tuanzi", "name": "  小橘 ", "lines": { "click": ["嗨", " "] } } }"#)
             .unwrap()
             .apply(&mut p)
             .unwrap();
-        let c = &p.custom["preset:tuantuan"];
+        let c = &p.custom["preset:tuanzi"];
         assert_eq!(c.name.as_deref(), Some("小橘"));
         assert_eq!(c.lines.as_ref().unwrap()["click"], vec!["嗨".to_string()]);
         // Back to the pet's own: the entry disappears.
-        patch(r#"{ "custom": { "pet": "preset:tuantuan", "name": "", "lines": {} } }"#).unwrap().apply(&mut p).unwrap();
+        patch(r#"{ "custom": { "pet": "preset:tuanzi", "name": "", "lines": {} } }"#).unwrap().apply(&mut p).unwrap();
         assert!(p.custom.is_empty());
         patch(r#"{ "custom": { "pet": "codex:x", "hidden": true } }"#).unwrap().apply(&mut p).unwrap();
         assert!(p.custom["codex:x"].hidden);
@@ -364,8 +370,18 @@ mod tests {
     fn builtin_becomes_preset() {
         let mut p: Prefs = serde_json::from_str(r#"{ "pet": "builtin", "sizes": { "builtin": 2 } }"#).unwrap();
         p.upgrade();
-        assert_eq!(p.pet.as_deref(), Some("preset:tuantuan"));
+        assert_eq!(p.pet.as_deref(), Some("preset:tuanzi"));
         assert_eq!(p.size, 2.0);
+    }
+
+    #[test]
+    fn tuantuan_becomes_tuanzi() {
+        let json = r#"{ "pet": "preset:tuantuan", "custom": { "preset:tuantuan": { "name": "小橘", "hidden": true } } }"#;
+        let mut p: Prefs = serde_json::from_str(json).unwrap();
+        p.upgrade();
+        assert_eq!(p.pet.as_deref(), Some("preset:tuanzi"));
+        assert_eq!(p.custom.keys().collect::<Vec<_>>(), ["preset:tuanzi"]);
+        assert_eq!(p.custom["preset:tuanzi"].name.as_deref(), Some("小橘"));
     }
 
     #[test]

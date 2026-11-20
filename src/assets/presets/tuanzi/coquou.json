@@ -40,7 +40,7 @@
   },
   "lines": {
     "hello": [
-      "团团在此！",
+      "团子在此！",
       "喵～我来啦"
     ],
     "click": [
@@ -58,34 +58,34 @@
     ],
     "held": [
       "喵呜！",
-      "放团团下来！"
+      "放团子下来！"
     ],
     "idle": [
       "要不要休息一下？",
-      "团团想吃小鱼干",
+      "团子想吃小鱼干",
       "（打了个哈欠）"
     ],
     "working": [
-      "团团帮你盯着喵",
+      "团子帮你盯着喵",
       "爪爪忙起来了！",
-      "嗯……让团团看看"
+      "嗯……让团子看看"
     ],
     "failed": [
       "喵呜……没弄好",
-      "团团尽力了喵"
+      "团子尽力了喵"
     ],
     "waiting": [
       "好啦，快来看看喵！",
-      "团团等你哦～"
+      "团子等你哦～"
     ]
   },
   "translations": {
     "en": {
-      "displayName": "Tuantuan",
+      "displayName": "Tuanzi",
       "description": "A round little orange cat with three small stripes on the forehead.",
       "lines": {
         "hello": [
-          "Tuantuan is here!",
+          "Tuanzi is here!",
           "Meow~ I'm here"
         ],
         "click": [
@@ -103,25 +103,25 @@
         ],
         "held": [
           "Mrrow!",
-          "Put Tuantuan down!"
+          "Put Tuanzi down!"
         ],
         "idle": [
           "Time for a little break?",
-          "Tuantuan wants dried fish",
+          "Tuanzi wants dried fish",
           "(yawns)"
         ],
         "working": [
-          "Tuantuan's on it, meow",
+          "Tuanzi's on it, meow",
           "Paws are busy!",
-          "Hmm… let Tuantuan see"
+          "Hmm… let Tuanzi see"
         ],
         "failed": [
           "Mrrow… that didn't work",
-          "Tuantuan tried, meow"
+          "Tuanzi tried, meow"
         ],
         "waiting": [
           "Done! Come take a look, meow!",
-          "Tuantuan's waiting for you~"
+          "Tuanzi's waiting for you~"
         ]
       }
     }
