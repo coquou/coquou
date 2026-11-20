@@ -34,9 +34,9 @@ const ZONES = () => [
 const THEMES = () => [["system", t("跟随系统", "System")], ["light", t("浅色", "Light")], ["dark", t("深色", "Dark")]];
 const LANGUAGES = () => [["system", t("跟随系统", "System")], ["zh", "中文"], ["en", "English"]];
 const sourceName = (s) => ({ preset: t("预设", "Preset"), coquou: t("我的", "Mine"), codex: "Codex" }[s] || s);
-// The 已隐藏 tab only when the 显示隐藏宠物 setting is on (settings.rs `show_hidden`).
+// The 隐藏 tab only when the 显示隐藏宠物 setting is on (settings.rs `show_hidden`).
 const FILTERS = () => [["all", t("全部", "All")], ["preset", sourceName("preset")], ["coquou", sourceName("coquou")], ["codex", "Codex"],
-  ...(settings?.showHidden ? [["hidden", t("已隐藏", "Hidden")]] : [])];
+  ...(settings?.showHidden ? [["hidden", t("隐藏", "Hidden")]] : [])];
 // Occasions a pet speaks on (prefs.rs / install.rs LINE_KINDS).
 const LINE_KINDS = () => [["hello", t("打招呼", "Hello")], ["click", t("被点", "Clicked")], ["pet", t("被摸", "Petted")], ["wake", t("被吵醒", "Woken up")], ["held", t("被拎起来", "Picked up")], ["idle", t("闲着没事", "Idle")], ["working", t("忙着干活", "Working")], ["failed", t("出错了", "Something failed")], ["waiting", t("等你来看", "Waiting for you")]];
 
@@ -192,7 +192,7 @@ const toggleHidden = (p) => setPrefs({ custom: { pet: p.key, hidden: !p.hidden }
   .then((v) => v && toast(p.hidden
     ? t(`「${p.displayName}」回到列表了`, `${p.displayName} is back in the list`)
     : settings?.showHidden
-      ? t(`已隐藏「${p.displayName}」，可以在「已隐藏」里找回`, `${p.displayName} is hidden; find them under Hidden`)
+      ? t(`已隐藏「${p.displayName}」，可以在「隐藏」里找回`, `${p.displayName} is hidden; find them under Hidden`)
       : t(`已隐藏「${p.displayName}」，在「通用」里打开「显示隐藏宠物」可以找回`, `${p.displayName} is hidden; turn on Show hidden pets in General to find them`)));
 // Only pets installed in Coquou's own folder can be deleted.
 async function deletePet(p) {
@@ -489,7 +489,7 @@ async function loadSettings() {
   sel.disabled = settings.displays.length < 2;
   $("petsDir").textContent = settings.petsDir || "";
   $("codexDir").textContent = settings.codexDir || "";
-  // The 已隐藏 tab follows showHidden.
+  // The 隐藏 tab follows showHidden.
   renderFilters();
   renderGrid();
 }

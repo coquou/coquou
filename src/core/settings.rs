@@ -44,7 +44,7 @@ pub struct Settings {
     /// Check GitHub for new versions in the background (update.rs).
     #[serde(default = "yes")]
     pub auto_update: bool,
-    /// The pets page offers a 已隐藏 tab to find hidden pets again; off, they
+    /// The pets page offers a 隐藏 tab to find hidden pets again; off, they
     /// stay out of sight.
     #[serde(default)]
     pub show_hidden: bool,
